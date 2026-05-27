@@ -113,35 +113,41 @@ export async function generateCapabilitySummaryAction(projectId: string): Promis
 }
 
 export async function generateMatchAnalysisAction(projectId: string): Promise<ActionResult> {
-  const userId = requireClerkUserId();
-  const [jdRecord, projectCard] = await Promise.all([
-    getLatestJdRecord(projectId, userId),
-    getLatestProjectCard(projectId, userId)
-  ]);
-
-  if (!projectCard) {
-    return {
-      success: false,
-      message: "请先到项目卡片页生成并确认项目卡片，再开始匹配分析。"
-    };
-  }
-
-  const capabilitySummary = jdRecord?.capabilitySummary as
-    | {
-        responsibilities?: string[];
-        capabilities?: string[];
-        priorities?: Array<{ label: string; level: string }>;
-      }
-    | null;
-
-  if (!jdRecord || !capabilitySummary?.responsibilities?.length || !capabilitySummary.capabilities?.length || !capabilitySummary.priorities?.length) {
-    return {
-      success: false,
-      message: "请先生成岗位能力摘要，再开始匹配分析。"
-    };
-  }
+  let stage = "初始化";
 
   try {
+    stage = "读取登录用户";
+    const userId = requireClerkUserId();
+
+    stage = "读取 JD 记录和项目卡片";
+    const [jdRecord, projectCard] = await Promise.all([
+      getLatestJdRecord(projectId, userId),
+      getLatestProjectCard(projectId, userId)
+    ]);
+
+    if (!projectCard) {
+      return {
+        success: false,
+        message: "请先到项目卡片页生成并确认项目卡片，再开始匹配分析。"
+      };
+    }
+
+    const capabilitySummary = jdRecord?.capabilitySummary as
+      | {
+          responsibilities?: string[];
+          capabilities?: string[];
+          priorities?: Array<{ label: string; level: string }>;
+        }
+      | null;
+
+    if (!jdRecord || !capabilitySummary?.responsibilities?.length || !capabilitySummary.capabilities?.length || !capabilitySummary.priorities?.length) {
+      return {
+        success: false,
+        message: "请先生成岗位能力摘要，再开始匹配分析。"
+      };
+    }
+
+    stage = "调用 API 生成匹配分析";
     const analysis = await generateMatchAnalysisDraft({
       projectCard: {
         title: projectCard.title ?? "项目卡片草稿",
@@ -156,6 +162,7 @@ export async function generateMatchAnalysisAction(projectId: string): Promise<Ac
       }
     });
 
+    stage = "生成通俗解释";
     const plainExplanations = await generatePlainMatchAnalysisExplanations({
       matchedPoints: analysis.matchedPoints,
       gapPoints: analysis.gapPoints,
@@ -163,11 +170,13 @@ export async function generateMatchAnalysisAction(projectId: string): Promise<Ac
       summary: analysis.summary
     });
 
+    stage = "保存匹配分析到数据库";
     const saved = await saveGeneratedMatchAnalysis(projectId, jdRecord.id, userId, {
       ...analysis,
       plainExplanations
     });
 
+    stage = "刷新 JD 分析页面缓存";
     revalidatePath("/jd-analysis");
 
     return {
@@ -177,9 +186,17 @@ export async function generateMatchAnalysisAction(projectId: string): Promise<Ac
       model: analysis.model
     };
   } catch (error) {
+    console.error("generateMatchAnalysisAction failed:", {
+      stage,
+      projectId,
+      error
+    });
+
+    const message = error instanceof Error ? error.message : String(error);
+
     return {
       success: false,
-      message: error instanceof Error ? error.message : "生成匹配分析草稿失败，请稍后再试。"
+      message: `匹配分析失败（${stage}）：${message || "未知错误"}`
     };
   }
 }
@@ -194,63 +211,104 @@ export async function updateMatchAnalysisAction(values: z.infer<typeof updateMat
     };
   }
 
-  const userId = requireClerkUserId();
-  const project = await getWorkspaceProjectById(parsed.data.projectId, userId);
+  let stage = "初始化";
 
-  if (!project) {
+  try {
+    stage = "读取登录用户";
+    const userId = requireClerkUserId();
+
+    stage = "校验项目权限";
+    const project = await getWorkspaceProjectById(parsed.data.projectId, userId);
+
+    if (!project) {
+      return {
+        success: false,
+        message: "当前项目不存在，或你无权保存该匹配分析。"
+      };
+    }
+
+    stage = "保存匹配分析到数据库";
+    const updated = await updateMatchAnalysis(parsed.data.matchAnalysisId, parsed.data.projectId, userId, {
+      matchedPoints: parsed.data.matchedPoints,
+      gapPoints: parsed.data.gapPoints,
+      suggestionPoints: parsed.data.suggestionPoints,
+      plainExplanations: {
+        matchedPoints: parsed.data.plainMatchedPoints,
+        gapPoints: parsed.data.plainGapPoints,
+        suggestionPoints: parsed.data.plainSuggestionPoints
+      },
+      summary: parsed.data.summary,
+      status: parsed.data.status
+    });
+
+    if (!updated) {
+      return {
+        success: false,
+        message: "当前匹配分析不存在，或你无权编辑该草稿。"
+      };
+    }
+
+    stage = "刷新 JD 分析页面缓存";
+    revalidatePath("/jd-analysis");
+
+    return {
+      success: true,
+      message: "匹配分析已更新，当前确认结果已保存。",
+      savedAt: updated.updatedAt.toISOString()
+    };
+  } catch (error) {
+    console.error("updateMatchAnalysisAction failed:", {
+      stage,
+      projectId: parsed.data.projectId,
+      matchAnalysisId: parsed.data.matchAnalysisId,
+      error
+    });
+
     return {
       success: false,
-      message: "当前项目不存在，或你无权保存该匹配分析。"
+      message: `保存匹配分析失败（${stage}）：${error instanceof Error ? error.message : String(error)}`
     };
   }
-
-  const updated = await updateMatchAnalysis(parsed.data.matchAnalysisId, parsed.data.projectId, userId, {
-    matchedPoints: parsed.data.matchedPoints,
-    gapPoints: parsed.data.gapPoints,
-    suggestionPoints: parsed.data.suggestionPoints,
-    plainExplanations: {
-      matchedPoints: parsed.data.plainMatchedPoints,
-      gapPoints: parsed.data.plainGapPoints,
-      suggestionPoints: parsed.data.plainSuggestionPoints
-    },
-    summary: parsed.data.summary,
-    status: parsed.data.status
-  });
-
-  if (!updated) {
-    return {
-      success: false,
-      message: "当前匹配分析不存在，或你无权编辑该草稿。"
-    };
-  }
-
-  revalidatePath("/jd-analysis");
-
-  return {
-    success: true,
-    message: "匹配分析已更新，当前确认结果已保存。",
-    savedAt: updated.updatedAt.toISOString()
-  };
 }
 
 export async function saveMatchAnalysisVersionAction(projectId: string): Promise<ActionResult> {
-  const userId = requireClerkUserId();
-  const analysis = await getLatestMatchAnalysis(projectId, userId);
+  let stage = "初始化";
 
-  if (!analysis) {
+  try {
+    stage = "读取登录用户";
+    const userId = requireClerkUserId();
+
+    stage = "读取最新匹配分析";
+    const analysis = await getLatestMatchAnalysis(projectId, userId);
+
+    if (!analysis) {
+      return {
+        success: false,
+        message: "当前还没有可保存的匹配分析草稿，请先生成分析。"
+      };
+    }
+
+    stage = "保存匹配分析版本到数据库";
+    const version = await createMatchAnalysisVersion(projectId, userId, analysis);
+
+    stage = "刷新 JD 分析页面缓存";
+    revalidatePath("/jd-analysis");
+
+    return {
+      success: true,
+      message: `匹配分析版本已保存：${version.title}`,
+      savedAt: version.createdAt.toISOString()
+    };
+  } catch (error) {
+    console.error("saveMatchAnalysisVersionAction failed:", {
+      stage,
+      projectId,
+      error
+    });
+
     return {
       success: false,
-      message: "当前还没有可保存的匹配分析草稿，请先生成分析。"
+      message: `保存匹配分析版本失败（${stage}）：${error instanceof Error ? error.message : String(error)}`
     };
   }
-
-  const version = await createMatchAnalysisVersion(projectId, userId, analysis);
-
-  revalidatePath("/jd-analysis");
-
-  return {
-    success: true,
-    message: `匹配分析版本已保存：${version.title}`,
-    savedAt: version.createdAt.toISOString()
-  };
 }

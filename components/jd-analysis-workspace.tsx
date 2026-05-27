@@ -56,6 +56,7 @@ type JdAnalysisWorkspaceProps = {
   capabilitySummary: CapabilitySummary | null;
   matchAnalysis: MatchAnalysisData | null;
   versions: VersionItem[];
+  dataLoadError?: string;
 };
 
 const matchStatusOptions = [
@@ -96,7 +97,8 @@ export function JdAnalysisWorkspace({
   projectCardExists,
   capabilitySummary,
   matchAnalysis,
-  versions
+  versions,
+  dataLoadError
 }: JdAnalysisWorkspaceProps) {
   const router = useRouter();
   const [isSavingJd, startSavingJd] = useTransition();
@@ -284,6 +286,12 @@ export function JdAnalysisWorkspace({
       <section className="page-card p-6 sm:p-8">
         <span className="soft-chip">阶段 8 · Quest 8.1-8.5</span>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">JD 分析</h1>
+        {dataLoadError ? (
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-medium text-amber-800">页面数据读取失败</p>
+            <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-amber-700">{dataLoadError}</p>
+          </div>
+        ) : null}
         <div className="mt-6">
           <EmptyState
             icon={
@@ -322,6 +330,14 @@ export function JdAnalysisWorkspace({
           </div>
         </div>
       </section>
+
+      {dataLoadError ? (
+        <section className="page-card border-amber-200 bg-amber-50/70 p-5">
+          <p className="text-sm font-medium text-amber-800">页面部分数据读取失败</p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-amber-700">{dataLoadError}</p>
+          <p className="mt-2 text-xs leading-6 text-amber-700">保存动作可能已经完成；这是刷新页面时读取数据库失败。请稍后刷新页面确认最新结果。</p>
+        </section>
+      ) : null}
 
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -463,7 +479,12 @@ export function JdAnalysisWorkspace({
               </button>
             </div>
 
-            {analysisError ? <ErrorDisplay error={analysisError} compact /> : null}
+            {analysisError ? (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800">匹配分析失败</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-red-700">{analysisError}</p>
+              </div>
+            ) : null}
             <p className="mt-4 text-sm leading-7 text-slate-600">{analysisMessage}</p>
 
             {analysisForm ? (

@@ -46,7 +46,40 @@ function normalizeJsonText(value: string) {
 
 function normalizeStringArray(value: unknown) {
   if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);
+    return value
+      .map((item) => {
+        if (typeof item === "string") {
+          return item.trim();
+        }
+
+        if (typeof item === "object" && item !== null) {
+          const record = item as Record<string, unknown>;
+          const orderedFields = [
+            ["point", "结论"],
+            ["evidence", "证据"],
+            ["issue", "问题"],
+            ["risk", "风险"],
+            ["gap", "差距"],
+            ["suggestion", "建议"],
+            ["recommendation", "建议"],
+            ["action", "行动"],
+            ["reason", "原因"],
+            ["detail", "细节"]
+          ] as const;
+          const parts = orderedFields
+            .flatMap(([key, label]) => {
+              const fieldValue = record[key];
+              return typeof fieldValue === "string" && fieldValue.trim() ? [{ label, value: fieldValue.trim() }] : [];
+            });
+
+          if (parts.length > 0) {
+            return parts.map((part) => `${part.label}：${part.value}`).join("；");
+          }
+        }
+
+        return "";
+      })
+      .filter(Boolean);
   }
 
   if (typeof value === "string") {
@@ -57,22 +90,6 @@ function normalizeStringArray(value: unknown) {
   }
 
   return [];
-}
-
-function ensureAtLeastItems(items: string[], fallbackItems: string[], minimum = 3) {
-  const next = [...items];
-
-  for (const item of fallbackItems) {
-    if (next.length >= minimum) {
-      break;
-    }
-
-    if (!next.includes(item)) {
-      next.push(item);
-    }
-  }
-
-  return next;
 }
 
 export async function generateSandboxReply(prompt: string) {
@@ -279,41 +296,35 @@ export async function generateMatchAnalysisDraft(input: {
     priorities: Array<{ label: string; level: string }>;
   };
 }) {
-  const defaultMatchedPoints = [
-    `项目背景与岗位关注的“${input.capabilitySummary.priorities[0]?.label ?? input.capabilitySummary.capabilities[0] ?? "核心职责"}”方向存在明确关联。`,
-    `项目职责中已经体现了${input.capabilitySummary.capabilities.slice(0, 2).join("、") || "跨团队协作与产品推进"}等岗位关心的能力。`,
-    `项目结果部分提供了可用于岗位匹配表达的落地产出与业务价值。`
-  ];
-  const defaultGapPoints = [
-    `当前项目表达里对“${input.capabilitySummary.capabilities[0] ?? "关键能力"}”的直接证据还不够集中，需要进一步强化。`,
-    `项目结果虽然有产出，但可量化指标和影响范围还可以再补充得更具体。`,
-    `与 JD 中高优先级要求相比，当前卡片在方法论或专业深度表达上仍有提升空间。`
-  ];
-  const defaultSuggestionPoints = [
-    `后续表达时优先把项目背景和岗位最关注的“${input.capabilitySummary.priorities[0]?.label ?? "核心目标"}”直接对齐。`,
-    `在职责描述里补强${input.capabilitySummary.capabilities.slice(0, 2).join("、") || "关键能力"}相关动作证据，减少空泛总结。`,
-    `在结果部分增加业务影响、效率提升或决策价值等量化结果，让匹配点更有说服力。`
-  ];
-
   const projectFactDigest = [
     `项目标题：${input.projectCard.title}`,
     `项目背景：${input.projectCard.background}`,
     `核心职责：${input.projectCard.responsibility}`,
     `项目结果：${input.projectCard.result}`
   ].join("\n");
+  const generationBatch = `${new Date().toISOString()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  const { text } = await generateText({
-    model: createSandboxModel(),
-    system:
-      "你是一个求职匹配分析助手。你要基于项目卡片和 JD 能力摘要，输出结构化匹配分析草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
-    prompt: `请基于下面信息生成匹配分析草稿。\n\n项目事实：\n${projectFactDigest}\n\nJD 职责重点：${input.capabilitySummary.responsibilities.join("；")}\nJD 能力关键词：${input.capabilitySummary.capabilities.join("；")}\nJD 优先级：${input.capabilitySummary.priorities.map((item) => `${item.label}(${item.level})`).join("；")}\n\n输出要求：\n1. 只输出 JSON。\n2. 优先使用格式 {"matchedPoints":[...],"gapPoints":[...],"suggestionPoints":[...],"summary":"..."}。\n3. 每一条 matchedPoints 必须尽量引用项目中的具体动作、模块、结果或决策，而不是只写抽象能力词。\n4. 每一条 gapPoints 优先写成“表达缺口、证据缺口、量化缺口”这类真实求职问题，而不是简单下结论说能力不足。\n5. 每一条 suggestionPoints 必须能直接指导后续简历改写或面试表达。\n6. 如果你习惯别名，也只能使用 strengths 对应 matchedPoints、risks 或 weaknesses 对应 gapPoints、recommendations 或 nextSteps 对应 suggestionPoints。\n7. 每类 points 至少输出 3 条，且不能为空。\n8. summary 用 2 到 4 句总结当前匹配情况，不能为空，并指出最值得主打的亮点和最该补的短板。\n9. 使用简体中文，表达具体，不要空泛套话。`,
-    maxOutputTokens: 1200
-  });
+  let text = "";
+
+  try {
+    const result = await generateText({
+      model: createSandboxModel(),
+      system:
+        "你是一个求职匹配分析助手。你要基于项目卡片和 JD 能力摘要，输出结构化匹配分析草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
+      prompt: `请基于下面信息生成一版新的 JD 匹配分析草稿。\n\n本次生成批次：${generationBatch}\n请不要照搬上一版表达，优先换一个分析角度、换一组措辞和排序，但必须保持事实真实，不要编造项目事实。\n\n项目事实：\n${projectFactDigest}\n\nJD 职责重点：${input.capabilitySummary.responsibilities.join("；")}\nJD 能力关键词：${input.capabilitySummary.capabilities.join("；")}\nJD 优先级：${input.capabilitySummary.priorities.map((item) => `${item.label}(${item.level})`).join("；")}\n\n输出要求：\n1. 只输出合法 JSON，不要输出 Markdown，不要输出代码块，不要输出解释性前后缀。\n2. 顶层 JSON 必须包含且优先只包含这 4 个字段：{"matchedPoints":[],"gapPoints":[],"suggestionPoints":[],"summary":""}。\n3. matchedPoints、gapPoints、suggestionPoints 每个数组必须至少 3 条。\n4. 数组里的每一项可以是字符串，也可以是对象；更推荐对象格式：{"point":"一句明确结论","evidence":"来自项目事实或 JD 要求的具体证据"}。\n5. matchedPoints 用来写“项目与 JD 的强匹配点”，每条都要说明匹配了 JD 的哪个职责、能力或优先级，并引用项目中的具体动作、模块、结果或决策。\n6. gapPoints 用来写“当前表达或证据上的缺口”，优先写表达缺口、证据缺口、量化缺口，不要简单判断用户能力不足。\n7. suggestionPoints 用来写“下一步可执行建议”，必须能直接指导简历改写或面试表达，每条建议要具体到怎么改、补什么证据、强化哪个角度。\n8. summary 必须是 2 到 4 句中文总结，说明整体匹配度、最值得主打的亮点、最需要补强的短板。\n9. 不要使用空数组，不要返回 null，不要把 JSON 字段名翻译成中文。\n10. 使用简体中文，表达具体、克制、可信，不要空泛套话。`,
+      temperature: 0.8,
+      maxOutputTokens: 1200
+    });
+    text = result.text;
+  } catch (error) {
+    console.error("generateMatchAnalysisDraft API call failed:", error);
+    throw new Error(`匹配分析 API 调用失败：${error instanceof Error ? error.message : String(error)}`);
+  }
 
   const normalizedText = normalizeJsonText(text);
 
   if (!normalizedText) {
-    throw new Error("模型没有返回可解析的匹配分析草稿，请稍后再试。");
+    throw new Error("匹配分析 API 返回空内容：模型没有返回可解析文本。");
   }
 
   let parsed: {
@@ -321,43 +332,56 @@ export async function generateMatchAnalysisDraft(input: {
     gapPoints?: unknown;
     suggestionPoints?: unknown;
     summary?: unknown;
+    strengths?: unknown;
+    risks?: unknown;
+    weaknesses?: unknown;
+    recommendations?: unknown;
+    nextSteps?: unknown;
   };
 
   try {
-    parsed = JSON.parse(normalizedText) as {
-      matchedPoints?: unknown;
-      gapPoints?: unknown;
-      suggestionPoints?: unknown;
-      summary?: unknown;
-    };
+    parsed = JSON.parse(normalizedText) as typeof parsed;
   } catch {
-    throw new Error("模型返回内容无法解析为匹配分析草稿，请重试或更换模型。");
+    throw new Error(`匹配分析 API 返回 JSON 解析失败：返回内容前 300 字为「${normalizedText.slice(0, 300)}」`);
   }
 
   const matchedPoints = normalizeStringArray(parsed.matchedPoints);
   const gapPoints = normalizeStringArray(parsed.gapPoints);
   const suggestionPoints = normalizeStringArray(parsed.suggestionPoints);
+  const aliasMatchedPoints = normalizeStringArray(parsed.strengths);
+  const aliasGapPoints = normalizeStringArray(parsed.risks ?? parsed.weaknesses);
+  const aliasSuggestionPoints = normalizeStringArray(parsed.recommendations ?? parsed.nextSteps);
+  const finalMatchedPoints = matchedPoints.length ? matchedPoints : aliasMatchedPoints;
+  const finalGapPoints = gapPoints.length ? gapPoints : aliasGapPoints;
+  const finalSuggestionPoints = suggestionPoints.length ? suggestionPoints : aliasSuggestionPoints;
   const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
 
-  const aliasMatchedPoints = normalizeStringArray((parsed as { strengths?: unknown }).strengths);
-  const aliasGapPoints = normalizeStringArray((parsed as { risks?: unknown; weaknesses?: unknown }).risks ?? (parsed as { weaknesses?: unknown }).weaknesses);
-  const aliasSuggestionPoints = normalizeStringArray((parsed as { recommendations?: unknown; nextSteps?: unknown }).recommendations ?? (parsed as { nextSteps?: unknown }).nextSteps);
-  const nextMatchedPoints = matchedPoints.length ? matchedPoints : aliasMatchedPoints;
-  const nextGapPoints = gapPoints.length ? gapPoints : aliasGapPoints;
-  const nextSuggestionPoints = suggestionPoints.length ? suggestionPoints : aliasSuggestionPoints;
+  const missingFields = [
+    finalMatchedPoints.length ? "" : "matchedPoints/strengths",
+    finalGapPoints.length ? "" : "gapPoints/risks/weaknesses",
+    finalSuggestionPoints.length ? "" : "suggestionPoints/recommendations/nextSteps",
+    summary ? "" : "summary"
+  ].filter(Boolean);
 
-  const ensuredMatchedPoints = ensureAtLeastItems(nextMatchedPoints, defaultMatchedPoints);
-  const ensuredGapPoints = ensureAtLeastItems(nextGapPoints, defaultGapPoints);
-  const ensuredSuggestionPoints = ensureAtLeastItems(nextSuggestionPoints, defaultSuggestionPoints);
-  const ensuredSummary =
-    summary ||
-    `当前项目与目标岗位存在一定匹配基础，尤其在${input.capabilitySummary.capabilities.slice(0, 2).join("、") || "核心能力"}方面具备可表达空间，但仍需要进一步补强关键证据与结果呈现。`;
+  if (missingFields.length > 0) {
+    throw new Error(`匹配分析 API 返回字段缺失或为空：${missingFields.join("、")}。返回 JSON 为：${JSON.stringify(parsed).slice(0, 500)}`);
+  }
+
+  const shortGroups = [
+    finalMatchedPoints.length < 3 ? `matchedPoints 只有 ${finalMatchedPoints.length} 条` : "",
+    finalGapPoints.length < 3 ? `gapPoints 只有 ${finalGapPoints.length} 条` : "",
+    finalSuggestionPoints.length < 3 ? `suggestionPoints 只有 ${finalSuggestionPoints.length} 条` : ""
+  ].filter(Boolean);
+
+  if (shortGroups.length > 0) {
+    throw new Error(`匹配分析 API 返回条数不足：${shortGroups.join("；")}。每类至少需要 3 条。返回 JSON 为：${JSON.stringify(parsed).slice(0, 500)}`);
+  }
 
   return {
-    matchedPoints: ensuredMatchedPoints,
-    gapPoints: ensuredGapPoints,
-    suggestionPoints: ensuredSuggestionPoints,
-    summary: ensuredSummary,
+    matchedPoints: finalMatchedPoints,
+    gapPoints: finalGapPoints,
+    suggestionPoints: finalSuggestionPoints,
+    summary,
     model: process.env.AI_MODEL ?? ""
   };
 }
@@ -368,49 +392,17 @@ export async function generatePlainMatchAnalysisExplanations(input: {
   suggestionPoints: string[];
   summary: string;
 }) {
-  const { text } = await generateText({
-    model: createSandboxModel(),
-    system:
-      "你是一个求职分析翻译助手。你要把正式匹配分析翻译成通俗好懂、但仍然专业的说明。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
-    prompt: `请把下面的匹配分析结果翻译成更通俗易懂的版本。\n\n匹配点：${input.matchedPoints.join("；")}\n差距点：${input.gapPoints.join("；")}\n补充建议：${input.suggestionPoints.join("；")}\n总结：${input.summary}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"matchedPoints":"...","gapPoints":"...","suggestionPoints":"..."}。\n3. 每个字段写 2 到 4 句。\n4. matchedPoints 用更口语的方式解释“这些匹配点整体说明了什么，为什么值得重点讲”。\n5. gapPoints 用更口语的方式解释“这些差距更像哪里没讲清楚，后面应该补什么”。\n6. suggestionPoints 用更口语的方式解释“下一步最值得先改什么，优先顺序是什么”。\n7. 使用简体中文，不要鸡汤，不要重复原句。`,
-    maxOutputTokens: 900
-  });
+  const pick = (items: string[], fallback: string) => items.find((item) => item.trim())?.trim() ?? fallback;
+  const firstMatchedPoint = pick(input.matchedPoints, "项目里已经有一些能和岗位要求对上的经历");
+  const firstGapPoint = pick(input.gapPoints, "当前表达里还有一些证据和结果没有讲透");
+  const firstSuggestionPoint = pick(input.suggestionPoints, "后续可以优先把关键动作和结果补得更具体");
+  const summary = input.summary.trim();
 
-  const normalizedText = normalizeJsonText(text);
-
-  if (!normalizedText) {
-    return {
-      matchedPoints: "简单说，这组匹配点说明你的项目方向和岗位需求是对得上的，后面在简历和面试里可以优先把这部分作为主打亮点。",
-      gapPoints: "这组差距不一定代表你不会，更可能是你现在还没把关键证据、量化结果和岗位语言讲清楚，后面需要重点补强这些表达。",
-      suggestionPoints: "这组建议的重点不是全部重写，而是先把最能体现岗位相关性的动作和结果讲得更具体，再补上更有说服力的证据。"
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(normalizedText) as {
-      matchedPoints?: unknown;
-      gapPoints?: unknown;
-      suggestionPoints?: unknown;
-    };
-
-    return {
-      matchedPoints:
-        (typeof parsed.matchedPoints === "string" && parsed.matchedPoints.trim()) ||
-        "简单说，这组匹配点说明你的项目方向和岗位需求是对得上的，后面在简历和面试里可以优先把这部分作为主打亮点。",
-      gapPoints:
-        (typeof parsed.gapPoints === "string" && parsed.gapPoints.trim()) ||
-        "这组差距不一定代表你不会，更可能是你现在还没把关键证据、量化结果和岗位语言讲清楚，后面需要重点补强这些表达。",
-      suggestionPoints:
-        (typeof parsed.suggestionPoints === "string" && parsed.suggestionPoints.trim()) ||
-        "这组建议的重点不是全部重写，而是先把最能体现岗位相关性的动作和结果讲得更具体，再补上更有说服力的证据。"
-    };
-  } catch {
-    return {
-      matchedPoints: "简单说，这组匹配点说明你的项目方向和岗位需求是对得上的，后面在简历和面试里可以优先把这部分作为主打亮点。",
-      gapPoints: "这组差距不一定代表你不会，更可能是你现在还没把关键证据、量化结果和岗位语言讲清楚，后面需要重点补强这些表达。",
-      suggestionPoints: "这组建议的重点不是全部重写，而是先把最能体现岗位相关性的动作和结果讲得更具体，再补上更有说服力的证据。"
-    };
-  }
+  return {
+    matchedPoints: `简单说，这些匹配点说明你不是从零去贴这个岗位，项目里已经有可以主打的部分。尤其是“${firstMatchedPoint}”，后面在简历和面试里可以优先展开，讲清楚你做了什么、为什么和岗位相关。${summary ? `整体判断是：${summary}` : ""}`,
+    gapPoints: `这些差距更像是“还没讲清楚”，不一定代表你没有相关能力。比如“${firstGapPoint}”，后续需要补具体证据、量化结果或决策过程，让面试官更容易相信这段经历确实支撑岗位要求。`,
+    suggestionPoints: `下一步最值得先改的是把表达从概括判断落到具体动作和结果上。可以先从“${firstSuggestionPoint}”开始处理，再逐条检查匹配点是否都有项目事实支撑。`
+  };
 }
 
 export async function generateResumeRewriteDraft(input: {

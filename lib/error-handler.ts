@@ -19,6 +19,33 @@ export function categorizeError(error: unknown): CategorizedError {
   }
 
   if (
+    lowerMessage.includes("超时") ||
+    lowerMessage.includes("timeout") ||
+    lowerMessage.includes("timed out")
+  ) {
+    return {
+      category: "network",
+      message: "请求超时",
+      suggestion: "本次生成耗时过长，请稍后重试。如果频繁出现，优先检查当前功能是否一次触发了过多 AI 调用。"
+    };
+  }
+
+  if (
+    lowerMessage.includes("rate limit") ||
+    lowerMessage.includes("rate_limit") ||
+    lowerMessage.includes("429") ||
+    lowerMessage.includes("quota") ||
+    lowerMessage.includes("额度") ||
+    lowerMessage.includes("限流")
+  ) {
+    return {
+      category: "network",
+      message: "AI 服务繁忙",
+      suggestion: "模型接口当前可能限流或排队，请稍后重试。如果其他 AI 功能正常，通常不是本地配置问题。"
+    };
+  }
+
+  if (
     lowerMessage.includes("ai") ||
     lowerMessage.includes("模型") ||
     lowerMessage.includes("openai") ||
@@ -29,18 +56,6 @@ export function categorizeError(error: unknown): CategorizedError {
       category: "ai",
       message: "AI 服务暂时不可用",
       suggestion: "可能是 AI 接口配额已满或网络不稳定，请稍后再试。如果问题持续，请检查 AI 服务配置。"
-    };
-  }
-
-  if (
-    lowerMessage.includes("超时") ||
-    lowerMessage.includes("timeout") ||
-    lowerMessage.includes("timed out")
-  ) {
-    return {
-      category: "network",
-      message: "请求超时",
-      suggestion: "AI 生成或文件解析耗时过长，请稍后重试。如果频繁出现，可能是服务负载较高。"
     };
   }
 

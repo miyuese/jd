@@ -43,6 +43,12 @@ export function ErrorDisplay({ error, onRetry, compact = false }: ErrorDisplayPr
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-medium ${colors.text}`}>{categorized.message}</p>
             <p className="mt-1 text-xs text-slate-600">{categorized.suggestion}</p>
+            {categorized.message !== (error instanceof Error ? error.message : String(error)) && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">查看详细错误信息</summary>
+                <p className="mt-2 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600">{error instanceof Error ? error.message : String(error)}</p>
+              </details>
+            )}
           </div>
           {onRetry && (
             <button

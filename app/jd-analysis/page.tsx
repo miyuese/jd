@@ -15,22 +15,47 @@ export default async function JdAnalysisPage({
   searchParams?: { projectId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
-  const projects = await listWorkspaceProjects(userId);
+  let dataLoadError = "";
+  let projects: Awaited<ReturnType<typeof listWorkspaceProjects>> = [];
+
+  try {
+    projects = await listWorkspaceProjects(userId);
+  } catch (error) {
+    console.error("JdAnalysisPage listWorkspaceProjects failed:", error);
+    dataLoadError = `读取项目列表失败：${error instanceof Error ? error.message : String(error)}`;
+  }
+
   const requestedProjectId = Array.isArray(searchParams?.projectId) ? searchParams?.projectId[0] : searchParams?.projectId;
   const selectedProjectId = projects.some((project) => project.id === requestedProjectId)
     ? requestedProjectId ?? null
     : projects[0]?.id ?? null;
 
   if (!selectedProjectId) {
-    return <JdAnalysisWorkspace projects={[]} selectedProjectId={null} initialJdText="" jdSavedAt={null} projectCardExists={false} capabilitySummary={null} matchAnalysis={null} versions={[]} />;
+    return <JdAnalysisWorkspace projects={[]} selectedProjectId={null} initialJdText="" jdSavedAt={null} projectCardExists={false} capabilitySummary={null} matchAnalysis={null} versions={[]} dataLoadError={dataLoadError} />;
   }
 
-  const [projectCard, jdRecord, matchAnalysis, versions] = await Promise.all([
+  const appendLoadError = (label: string, error: unknown) => {
+    console.error(`JdAnalysisPage ${label} failed:`, error);
+    const message = `${label}失败：${error instanceof Error ? error.message : String(error)}`;
+    dataLoadError = dataLoadError ? `${dataLoadError}\n${message}` : message;
+  };
+
+  const [projectCardResult, jdRecordResult, matchAnalysisResult, versionsResult] = await Promise.allSettled([
     getLatestProjectCard(selectedProjectId, userId),
     getLatestJdRecord(selectedProjectId, userId),
     getLatestMatchAnalysis(selectedProjectId, userId),
     listMatchAnalysisVersions(selectedProjectId, userId)
   ]);
+
+  const projectCard = projectCardResult.status === "fulfilled" ? projectCardResult.value : null;
+  const jdRecord = jdRecordResult.status === "fulfilled" ? jdRecordResult.value : null;
+  const matchAnalysis = matchAnalysisResult.status === "fulfilled" ? matchAnalysisResult.value : null;
+  const versions = versionsResult.status === "fulfilled" ? versionsResult.value : [];
+
+  if (projectCardResult.status === "rejected") appendLoadError("读取项目卡片", projectCardResult.reason);
+  if (jdRecordResult.status === "rejected") appendLoadError("读取 JD 记录", jdRecordResult.reason);
+  if (matchAnalysisResult.status === "rejected") appendLoadError("读取匹配分析", matchAnalysisResult.reason);
+  if (versionsResult.status === "rejected") appendLoadError("读取匹配分析版本", versionsResult.reason);
 
   const capabilitySummary = jdRecord?.capabilitySummary as
     | {
@@ -100,6 +125,7 @@ export default async function JdAnalysisPage({
         title: version.title,
         createdAt: version.createdAt.toISOString()
       }))}
+      dataLoadError={dataLoadError}
     />
   );
 }
