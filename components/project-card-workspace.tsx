@@ -278,7 +278,7 @@ export function ProjectCardWorkspace({
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <div className="page-card p-5">
             <h3 className="font-semibold text-slate-900">生成草稿</h3>
             <p className="mt-3 text-sm text-slate-600">{generateMessage}</p>

@@ -130,7 +130,7 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
           </div>
         </form>
 
-        <div className="space-y-4">
+        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <div className="page-card p-5">
             <h3 className="text-lg font-semibold text-slate-900">这份简历的用途</h3>
             <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">

@@ -311,7 +311,7 @@ export function InterviewPrepWorkspace({
 
       <section className="grid gap-6 xl:grid-cols-2">
         {/* 1 分钟介绍 */}
-        <section className="page-card p-6 sm:p-8">
+        <section className="page-card h-fit p-6 sm:p-8 xl:sticky xl:top-6 xl:self-start">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
             <div>
               <span className="soft-chip">开场讲稿</span>

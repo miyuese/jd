@@ -547,7 +547,7 @@ export function ResumeRewriteWorkspace({
           ) : null}
         </section>
 
-        <section className="page-card p-6 sm:p-8">
+        <section className="page-card h-fit p-6 sm:p-8 xl:sticky xl:top-6 xl:self-start">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
             <div>
               <span className="soft-chip">应用改写</span>

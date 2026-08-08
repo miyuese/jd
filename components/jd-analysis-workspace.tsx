@@ -365,7 +365,7 @@ export function JdAnalysisWorkspace({
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <div className="page-card p-5">
             <h3 className="text-lg font-semibold text-slate-900">匹配分析版本</h3>
             <p className="mt-4 text-sm leading-7 text-slate-600">{versionMessage}</p>

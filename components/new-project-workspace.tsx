@@ -198,7 +198,7 @@ export function NewProjectWorkspace() {
           </div>
         </form>
 
-        <div className="space-y-4">
+        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <div className="rounded-[24px] border border-sky-100 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-lg font-semibold text-slate-900">项目草稿预览</h3>
