@@ -8,6 +8,7 @@ import { getWorkspaceProjectById } from "@/lib/neon-db";
 import { getLatestProjectCard } from "@/lib/stage7-data";
 import {
   createMatchAnalysisVersion,
+  getJdRecordById,
   getLatestJdRecord,
   getLatestMatchAnalysis,
   saveGeneratedMatchAnalysis,
@@ -40,6 +41,7 @@ type ActionResult =
       message: string;
       savedAt?: string;
       model?: string;
+      data?: unknown;
     }
   | {
       success: false;
@@ -73,13 +75,14 @@ export async function saveJdRecordAction(projectId: string, rawText: string): Pr
   return {
     success: true,
     message: "目标 JD 已保存，可以继续生成岗位能力摘要。",
-    savedAt: jdRecord.updatedAt.toISOString()
+    savedAt: jdRecord.updatedAt.toISOString(),
+    data: { jdId: jdRecord.id }
   };
 }
 
-export async function generateCapabilitySummaryAction(projectId: string): Promise<ActionResult> {
+export async function generateCapabilitySummaryAction(projectId: string, jdId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
-  const jdRecord = await getLatestJdRecord(projectId, userId);
+  const jdRecord = jdId ? await getJdRecordById(jdId, userId) : await getLatestJdRecord(projectId, userId);
 
   if (!jdRecord?.rawText.trim()) {
     return {
@@ -102,7 +105,8 @@ export async function generateCapabilitySummaryAction(projectId: string): Promis
       success: true,
       message: "岗位能力摘要已生成并保存，可以继续开始匹配分析。",
       savedAt: updated?.updatedAt.toISOString(),
-      model: summary.model
+      model: summary.model,
+      data: { jdId: jdRecord.id }
     };
   } catch (error) {
     return {
@@ -112,7 +116,7 @@ export async function generateCapabilitySummaryAction(projectId: string): Promis
   }
 }
 
-export async function generateMatchAnalysisAction(projectId: string): Promise<ActionResult> {
+export async function generateMatchAnalysisAction(projectId: string, jdId?: string): Promise<ActionResult> {
   let stage = "初始化";
 
   try {
@@ -121,7 +125,7 @@ export async function generateMatchAnalysisAction(projectId: string): Promise<Ac
 
     stage = "读取 JD 记录和项目卡片";
     const [jdRecord, projectCard] = await Promise.all([
-      getLatestJdRecord(projectId, userId),
+      jdId ? getJdRecordById(jdId, userId) : getLatestJdRecord(projectId, userId),
       getLatestProjectCard(projectId, userId)
     ]);
 

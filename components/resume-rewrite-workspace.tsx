@@ -10,6 +10,12 @@ import {
 } from "@/app/resume-rewrite/actions";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorDisplay } from "@/components/error-display";
+import { GeneratingIndicator } from "@/components/generating-indicator";
+import { loadDraft, saveDraft } from "@/lib/draft-storage";
+
+function draftRewriteKey(projectId: string | null) {
+  return `jd-helper:draft:rewrite:${projectId ?? "none"}`;
+}
 
 type ProjectOption = {
   id: string;
@@ -21,6 +27,8 @@ type ProjectOption = {
 type ResumeRewriteWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
+  jdRecords: Array<{ id: string; rawText: string; hasSummary: boolean; updatedAt: string }>;
+  selectedJdId: string | null;
   initialResumeText: string;
   resumeSavedAt: string | null;
   projectCardExists: boolean;
@@ -164,6 +172,8 @@ function formatDateTime(value: string | null) {
 export function ResumeRewriteWorkspace({
   projects,
   selectedProjectId,
+  jdRecords,
+  selectedJdId,
   initialResumeText,
   resumeSavedAt,
   projectCardExists,
@@ -172,6 +182,13 @@ export function ResumeRewriteWorkspace({
   initialRadarScores
 }: ResumeRewriteWorkspaceProps) {
   const router = useRouter();
+
+  const handleJdChange = (jdId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/resume-rewrite?projectId=${selectedProjectId}&jdId=${jdId}`);
+  };
   const [isGenerating, startGenerating] = useTransition();
   const [isGeneratingFragment, startGeneratingFragment] = useTransition();
   const [isSavingContext, startSavingContext] = useTransition();
@@ -217,6 +234,12 @@ export function ResumeRewriteWorkspace({
     setSaveMessage(
       initialResumeText ? "当前简历上下文已从数据库回填，可以继续编辑或应用改写稿。" : "当前还没有简历上下文内容，请先到简历材料页补充。"
     );
+
+    // 从 localStorage 恢复上次未保存的改写稿（防刷新丢失）
+    const savedRewrite = loadDraft<string>(draftRewriteKey(selectedProjectId));
+    if (savedRewrite) {
+      setRewriteDraft(savedRewrite);
+    }
   }, [initialResumeText, resumeSavedAt, selectedProjectId]);
 
   const handleProjectChange = (projectId: string) => {
@@ -231,7 +254,7 @@ export function ResumeRewriteWorkspace({
     setRewriteError("");
 
     startGenerating(async () => {
-      const result = await generateResumeRewriteAction(selectedProjectId, initialResumeText, rewriteMode);
+      const result = await generateResumeRewriteAction(selectedProjectId, initialResumeText, rewriteMode, selectedJdId ?? undefined);
 
       if (!result.success) {
         setRewriteError(result.message);
@@ -239,6 +262,7 @@ export function ResumeRewriteWorkspace({
       }
 
       setRewriteDraft(result.rewrite ?? "");
+      saveDraft(draftRewriteKey(selectedProjectId), result.rewrite ?? "");
       setRewriteReasoning(result.reasoning ?? "");
       setRewriteHighlights(result.highlights ?? []);
       setResponseModel(result.model ?? "");
@@ -284,7 +308,7 @@ export function ResumeRewriteWorkspace({
     setRewriteError("");
 
     startGeneratingFragment(async () => {
-      const result = await generateResumeFragmentRewriteAction(selectedProjectId, resumeContext, selectedFragment, rewriteMode);
+      const result = await generateResumeFragmentRewriteAction(selectedProjectId, resumeContext, selectedFragment, rewriteMode, selectedJdId ?? undefined);
 
       if (!result.success) {
         setRewriteError(result.message);
@@ -396,13 +420,28 @@ export function ResumeRewriteWorkspace({
             <h2 className="section-title">先选择要改写的项目</h2>
             <p className="section-copy mt-2">不同项目会基于各自的项目卡片和 JD 匹配分析生成对应的简历改写草稿。</p>
           </div>
-          <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm">
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name} · {project.targetRole}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col gap-3 lg:w-full lg:max-w-sm">
+            <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100">
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name} · {project.targetRole}
+                </option>
+              ))}
+            </select>
+            {jdRecords.length > 0 ? (
+              <select
+                value={selectedJdId ?? ""}
+                onChange={(event) => handleJdChange(event.target.value)}
+                className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              >
+                {jdRecords.map((jd, index) => (
+                  <option key={jd.id} value={jd.id}>
+                    目标 JD #{jdRecords.length - index} · {jd.hasSummary ? "已解析" : "未解析"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -505,6 +544,7 @@ export function ResumeRewriteWorkspace({
           </div>
 
           {rewriteError ? <ErrorDisplay error={rewriteError} compact /> : null}
+          {isGenerating ? <GeneratingIndicator label="AI 正在生成简历改写稿" /> : null}
           <p className="mt-4 text-sm leading-7 text-slate-600">{rewriteMessage}</p>
           {responseModel ? <div className="mt-3 text-xs text-slate-500">本轮生成模型：{responseModel}</div> : null}
 
@@ -630,6 +670,9 @@ export function ResumeRewriteWorkspace({
           <div className="mt-5 rounded-[24px] border border-sky-100 bg-sky-50/70 p-5 text-sm leading-7 text-slate-700">
             <div className="text-xs uppercase tracking-[0.22em] text-sky-700">当前状态</div>
             <div className="mt-3">{saveMessage}</div>
+            <div className="mt-3 rounded-2xl bg-white/80 px-4 py-3 text-xs leading-6 text-slate-500">
+              注意：当前简历上下文是全局唯一副本。切换项目后在此保存会覆盖之前的简历内容，如需保留多版，请先到「历史版本」保存输出版本。
+            </div>
           </div>
         </section>
       </section>

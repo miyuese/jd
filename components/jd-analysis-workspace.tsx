@@ -10,6 +10,12 @@ import {
   saveMatchAnalysisVersionAction,
   updateMatchAnalysisAction
 } from "@/app/jd-analysis/actions";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-storage";
+import { GeneratingIndicator } from "@/components/generating-indicator";
+
+function draftJdKey(projectId: string | null) {
+  return `jd-helper:draft:jd:${projectId ?? "none"}`;
+}
 import { EmptyState } from "@/components/empty-state";
 import { ErrorDisplay } from "@/components/error-display";
 
@@ -47,9 +53,18 @@ type VersionItem = {
   createdAt: string;
 };
 
+type JdRecordOption = {
+  id: string;
+  rawText: string;
+  hasSummary: boolean;
+  updatedAt: string;
+};
+
 type JdAnalysisWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
+  jdRecords: JdRecordOption[];
+  selectedJdId: string | null;
   initialJdText: string;
   jdSavedAt: string | null;
   projectCardExists: boolean;
@@ -92,6 +107,8 @@ function splitLines(value: string) {
 export function JdAnalysisWorkspace({
   projects,
   selectedProjectId,
+  jdRecords,
+  selectedJdId,
   initialJdText,
   jdSavedAt,
   projectCardExists,
@@ -106,6 +123,13 @@ export function JdAnalysisWorkspace({
   const [isGeneratingAnalysis, startGeneratingAnalysis] = useTransition();
   const [isSavingAnalysis, startSavingAnalysis] = useTransition();
   const [isSavingVersion, startSavingVersion] = useTransition();
+
+  const handleJdChange = (jdId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/jd-analysis?projectId=${selectedProjectId}&jdId=${jdId}`);
+  };
   const [jdText, setJdText] = useState(initialJdText);
   const [jdMessage, setJdMessage] = useState(initialJdText ? "当前项目已保存一份 JD 原文，可以继续编辑后覆盖保存。" : "先粘贴目标 JD，再生成岗位能力摘要和匹配分析。");
   const [jdError, setJdError] = useState("");
@@ -135,7 +159,9 @@ export function JdAnalysisWorkspace({
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
 
   useEffect(() => {
-    setJdText(initialJdText);
+    // 优先恢复本地未保存的 JD 文本草稿，否则用服务端数据
+    const savedJdText = loadDraft<string>(draftJdKey(selectedProjectId));
+    setJdText(savedJdText ?? initialJdText);
     setLatestJdSavedAt(jdSavedAt);
     setJdError("");
     setSummaryError("");
@@ -184,6 +210,11 @@ export function JdAnalysisWorkspace({
 
       setJdMessage(result.message);
       setLatestJdSavedAt(result.savedAt ?? new Date().toISOString());
+      // 已保存到数据库，清除本地草稿
+      clearDraft(draftJdKey(selectedProjectId));
+      // 保存会创建新的 JD 记录，跳转到它
+      const newJdId = (result.data as { jdId?: string } | undefined)?.jdId;
+      router.push(`/jd-analysis?projectId=${selectedProjectId}${newJdId ? `&jdId=${newJdId}` : ""}`);
       router.refresh();
     });
   };
@@ -196,7 +227,7 @@ export function JdAnalysisWorkspace({
     setSummaryError("");
 
     startGeneratingSummary(async () => {
-      const result = await generateCapabilitySummaryAction(selectedProjectId);
+      const result = await generateCapabilitySummaryAction(selectedProjectId, selectedJdId ?? undefined);
 
       if (!result.success) {
         setSummaryError(result.message);
@@ -217,7 +248,7 @@ export function JdAnalysisWorkspace({
     setAnalysisError("");
 
     startGeneratingAnalysis(async () => {
-      const result = await generateMatchAnalysisAction(selectedProjectId);
+      const result = await generateMatchAnalysisAction(selectedProjectId, selectedJdId ?? undefined);
 
       if (!result.success) {
         setAnalysisError(result.message);
@@ -395,13 +426,34 @@ export function JdAnalysisWorkspace({
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">录入目标 JD</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-600">先把目标岗位 JD 原文保存下来，后续所有岗位摘要和匹配分析都会基于这里的内容展开。</p>
               </div>
-              <div className="text-sm text-slate-500">最近保存：{formatDateTime(latestJdSavedAt)}</div>
+              <div className="flex flex-col gap-2 sm:items-end">
+                {jdRecords.length > 1 ? (
+                  <label className="flex items-center gap-2 text-xs text-slate-500">
+                    切换 JD：
+                    <select
+                      value={selectedJdId ?? ""}
+                      onChange={(event) => handleJdChange(event.target.value)}
+                      className="rounded-3xl border border-sky-100 bg-white px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                    >
+                      {jdRecords.map((jd, index) => (
+                        <option key={jd.id} value={jd.id}>
+                          JD #{jdRecords.length - index} · {jd.hasSummary ? "已解析" : "未解析"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <div className="text-sm text-slate-500">最近保存：{formatDateTime(latestJdSavedAt)}</div>
+              </div>
             </div>
 
             <textarea
               rows={12}
               value={jdText}
-              onChange={(event) => setJdText(event.target.value)}
+              onChange={(event) => {
+                setJdText(event.target.value);
+                saveDraft(draftJdKey(selectedProjectId), event.target.value);
+              }}
               placeholder="请粘贴目标岗位 JD 原文，例如岗位职责、任职要求、加分项等。"
               className="mt-6 w-full rounded-[24px] border border-sky-100 bg-slate-50/70 px-5 py-4 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
             />
@@ -429,6 +481,7 @@ export function JdAnalysisWorkspace({
             </div>
 
             {summaryError ? <ErrorDisplay error={summaryError} compact /> : null}
+            {isGeneratingSummary ? <GeneratingIndicator label="AI 正在解析 JD 能力" /> : null}
             <p className="mt-4 text-sm leading-7 text-slate-600">{summaryMessage}</p>
             {responseModel ? <div className="mt-3 text-xs text-slate-500">本轮生成模型：{responseModel}</div> : null}
 
@@ -478,6 +531,8 @@ export function JdAnalysisWorkspace({
                 {isGeneratingAnalysis ? "正在生成分析..." : "开始匹配分析"}
               </button>
             </div>
+
+            {isGeneratingAnalysis ? <GeneratingIndicator label="AI 正在生成匹配分析" /> : null}
 
             {analysisError ? (
               <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">

@@ -5,7 +5,7 @@ import { requireClerkUserId } from "@/lib/auth-scope";
 import { generateInterviewQuestionsList, generateOneMinuteIntro, generateThreeMinuteStory } from "@/lib/ai-config";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
 import { getLatestProjectCard } from "@/lib/stage7-data";
-import { getLatestMatchAnalysis } from "@/lib/stage8-data";
+import { getLatestMatchAnalysis, getMatchAnalysisByJdRecord } from "@/lib/stage8-data";
 import { createInterviewOutputVersion } from "@/lib/stage10-data";
 
 type ActionResult =
@@ -23,11 +23,11 @@ type ActionResult =
       message: string;
     };
 
-async function getInterviewInputs(projectId: string, userId: string) {
+async function getInterviewInputs(projectId: string, userId: string, jdId?: string) {
   const [project, projectCard, matchAnalysis] = await Promise.all([
     getWorkspaceProjectById(projectId, userId),
     getLatestProjectCard(projectId, userId),
-    getLatestMatchAnalysis(projectId, userId)
+    jdId ? getMatchAnalysisByJdRecord(jdId, userId) : getLatestMatchAnalysis(projectId, userId)
   ]);
 
   if (!project) {
@@ -49,11 +49,11 @@ async function getInterviewInputs(projectId: string, userId: string) {
   };
 }
 
-export async function generateOneMinuteIntroAction(projectId: string): Promise<ActionResult> {
+export async function generateOneMinuteIntroAction(projectId: string, jdId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
 
   try {
-    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId);
+    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId);
     const result = await generateOneMinuteIntro({
       projectCard: {
         title: projectCard.title ?? project.name,
@@ -96,11 +96,11 @@ export async function generateOneMinuteIntroAction(projectId: string): Promise<A
   }
 }
 
-export async function generateThreeMinuteStoryAction(projectId: string): Promise<ActionResult> {
+export async function generateThreeMinuteStoryAction(projectId: string, jdId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
 
   try {
-    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId);
+    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId);
     const result = await generateThreeMinuteStory({
       projectCard: {
         title: projectCard.title ?? project.name,
@@ -143,11 +143,11 @@ export async function generateThreeMinuteStoryAction(projectId: string): Promise
   }
 }
 
-export async function generateInterviewQuestionsAction(projectId: string): Promise<ActionResult> {
+export async function generateInterviewQuestionsAction(projectId: string, jdId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
 
   try {
-    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId);
+    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId);
     const result = await generateInterviewQuestionsList({
       projectCard: {
         title: projectCard.title ?? project.name,

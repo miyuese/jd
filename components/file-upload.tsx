@@ -91,7 +91,7 @@ export function FileUpload({ onTextExtracted }: FileUploadProps) {
           />
         </label>
         <span className="text-xs text-slate-500">
-          支持 .docx、.pdf、.jpg、.png
+          支持 .docx / .pdf（扫描件自动 OCR）/ .jpg / .png，识别可能需要 10-60 秒
         </span>
       </div>
       {progress ? <p className="mt-2 text-sm text-sky-600">{progress}</p> : null}

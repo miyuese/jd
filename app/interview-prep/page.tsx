@@ -6,6 +6,7 @@ import { getLatestProjectCard } from "@/lib/stage7-data";
 import { getLatestMatchAnalysis } from "@/lib/stage8-data";
 import { listInterviewOutputVersions } from "@/lib/stage10-data";
 import { listAbilityGaps } from "@/lib/memory-data";
+import { getLatestJdRecord, listJdRecords } from "@/lib/stage8-data";
 
 export const metadata: Metadata = {
   title: "面试准备"
@@ -39,7 +40,7 @@ async function getLatestInterviewOutputs(projectId: string, userId: string) {
 export default async function InterviewPrepPage({
   searchParams
 }: {
-  searchParams?: { projectId?: string | string[] };
+  searchParams?: { projectId?: string | string[]; jdId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
   const [projects, abilityGaps] = await Promise.all([listWorkspaceProjects(userId), listAbilityGaps(userId)]);
@@ -57,6 +58,8 @@ export default async function InterviewPrepPage({
       <InterviewPrepWorkspace
         projects={[]}
         selectedProjectId={null}
+        jdRecords={[]}
+        selectedJdId={null}
         projectCardExists={false}
         matchAnalysisExists={false}
         latestOutput={{
@@ -69,11 +72,17 @@ export default async function InterviewPrepPage({
     );
   }
 
-  const [projectCard, matchAnalysis, latestOutput] = await Promise.all([
+  const [projectCard, matchAnalysis, latestOutput, jdRecords, latestJd] = await Promise.all([
     getLatestProjectCard(selectedProjectId, userId),
     getLatestMatchAnalysis(selectedProjectId, userId),
-    getLatestInterviewOutputs(selectedProjectId, userId)
+    getLatestInterviewOutputs(selectedProjectId, userId),
+    listJdRecords(selectedProjectId, userId),
+    getLatestJdRecord(selectedProjectId, userId)
   ]);
+  const requestedJdId = Array.isArray(searchParams?.jdId) ? searchParams?.jdId[0] : searchParams?.jdId;
+  const selectedJdId = jdRecords.some((jd) => jd.id === requestedJdId)
+    ? requestedJdId ?? null
+    : (latestJd?.id ?? null);
 
   return (
     <InterviewPrepWorkspace
@@ -84,6 +93,13 @@ export default async function InterviewPrepPage({
         currentNeed: project.currentNeed
       }))}
       selectedProjectId={selectedProjectId}
+      jdRecords={jdRecords.map((jd) => ({
+        id: jd.id,
+        rawText: jd.rawText,
+        hasSummary: Boolean((jd.capabilitySummary as { responsibilities?: unknown[] } | null)?.responsibilities?.length),
+        updatedAt: jd.updatedAt.toISOString()
+      }))}
+      selectedJdId={selectedJdId}
       projectCardExists={Boolean(projectCard)}
       matchAnalysisExists={Boolean(matchAnalysis)}
       latestOutput={latestOutput}

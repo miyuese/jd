@@ -121,3 +121,81 @@ button {
     }
   }
 }
+
+/* ========== 深色模式全局覆盖（统一各页硬编码浅色，保持圆润风格） ========== */
+
+.dark .page-card {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.dark .bg-white,
+.dark .bg-white\/90 {
+  background-color: rgba(30, 41, 59, 0.9);
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-50\/65,
+.dark .bg-slate-50\/70,
+.dark .bg-slate-50\/75 {
+  background-color: rgba(30, 41, 59, 0.55);
+}
+
+.dark .bg-sky-50,
+.dark .bg-sky-50\/65,
+.dark .bg-sky-50\/70,
+.dark .bg-sky-50\/75,
+.dark .bg-sky-50\/90 {
+  background-color: rgba(15, 23, 42, 0.65);
+}
+
+.dark .bg-teal-50,
+.dark .bg-teal-50\/50 {
+  background-color: rgba(8, 80, 65, 0.4);
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-50\/50,
+.dark .bg-amber-50\/60 {
+  background-color: rgba(99, 56, 6, 0.45);
+}
+
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/70 {
+  background-color: rgba(6, 78, 59, 0.45);
+}
+
+.dark .bg-rose-50 {
+  background-color: rgba(127, 29, 29, 0.45);
+}
+
+.dark .text-slate-900,
+.dark .text-slate-800 {
+  color: #e2e8f0;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-600 {
+  color: #cbd5e1;
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #94a3b8;
+}
+
+.dark .border-sky-100,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-teal-100,
+.dark .border-amber-100 {
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: rgba(30, 41, 59, 0.7);
+  color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.25);
+}

@@ -259,6 +259,26 @@ export async function getMemorySourceById(sourceId: string, clerkUserId: string)
   return rows[0] ?? null;
 }
 
+/** 按来源业务记录 id 查询记忆源（用于自动入库幂等去重）。 */
+export async function findMemorySourceByRef(clerkUserId: string, sourceRefId: string) {
+  if (!sourceRefId) {
+    return null;
+  }
+
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT "id", "clerkUserId", "sourceType", "title", "rawText", "sourceRefId", "projectId", "createdAt"
+      FROM "JdMemorySource"
+      WHERE "clerkUserId" = $1 AND "sourceRefId" = $2
+      LIMIT 1
+    `,
+    [clerkUserId, sourceRefId]
+  )) as MemorySourceRow[];
+
+  return rows[0] ?? null;
+}
+
 export async function deleteMemorySource(sourceId: string, clerkUserId: string) {
   const sql = getSql();
   await sql.query(
@@ -572,4 +592,46 @@ export async function listAbilityGaps(clerkUserId: string): Promise<AbilityGapIt
   }
 
   return Array.from(grouped.values());
+}
+
+/** 批量查询多个标签的证据（修复 N+1 查询）。返回按标签分组的证据映射。 */
+export async function listChunksByTagIds(tagIds: string[]) {
+  if (tagIds.length === 0) {
+    return new Map<string, Array<{ chunkId: string; content: string; sourceTitle: string | null; sourceType: MemorySourceType | null }>>();
+  }
+
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT tc."tagId", c."id" AS "chunkId", c."content",
+             s."title" AS "sourceTitle", s."sourceType"
+      FROM "JdMemoryTagChunk" tc
+      JOIN "JdMemoryChunk" c ON c."id" = tc."chunkId"
+      JOIN "JdMemorySource" s ON s."id" = c."sourceId"
+      WHERE tc."tagId" = ANY($1)
+      ORDER BY c."chunkIndex" ASC
+    `,
+    [tagIds]
+  )) as Array<{
+    tagId: string;
+    chunkId: string;
+    content: string;
+    sourceTitle: string | null;
+    sourceType: MemorySourceType | null;
+  }>;
+
+  const grouped = new Map<string, Array<{ chunkId: string; content: string; sourceTitle: string | null; sourceType: MemorySourceType | null }>>();
+
+  for (const row of rows) {
+    const list = grouped.get(row.tagId) ?? [];
+    list.push({
+      chunkId: row.chunkId,
+      content: row.content,
+      sourceTitle: row.sourceTitle,
+      sourceType: row.sourceType
+    });
+    grouped.set(row.tagId, list);
+  }
+
+  return grouped;
 }

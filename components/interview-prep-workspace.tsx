@@ -8,6 +8,12 @@ import {
   generateThreeMinuteStoryAction,
   generateInterviewQuestionsAction
 } from "@/app/interview-prep/actions";
+import { loadDraft, saveDraft } from "@/lib/draft-storage";
+import { GeneratingIndicator } from "@/components/generating-indicator";
+
+function draftInterviewKey(projectId: string | null) {
+  return `jd-helper:draft:interview:${projectId ?? "none"}`;
+}
 import { EmptyState } from "@/components/empty-state";
 import { ErrorDisplay } from "@/components/error-display";
 
@@ -21,6 +27,8 @@ type ProjectOption = {
 type InterviewPrepWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
+  jdRecords: Array<{ id: string; rawText: string; hasSummary: boolean; updatedAt: string }>;
+  selectedJdId: string | null;
   projectCardExists: boolean;
   matchAnalysisExists: boolean;
   latestOutput: {
@@ -62,12 +70,21 @@ function formatDateTime(value: string | null) {
 export function InterviewPrepWorkspace({
   projects,
   selectedProjectId,
+  jdRecords,
+  selectedJdId,
   projectCardExists,
   matchAnalysisExists,
   latestOutput,
   initialAbilityGaps
 }: InterviewPrepWorkspaceProps) {
   const router = useRouter();
+
+  const handleJdChange = (jdId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/interview-prep?projectId=${selectedProjectId}&jdId=${jdId}`);
+  };
   const [isGeneratingOneMin, startGeneratingOneMin] = useTransition();
   const [isGeneratingThreeMin, startGeneratingThreeMin] = useTransition();
   const [isGeneratingQuestions, startGeneratingQuestions] = useTransition();
@@ -99,7 +116,26 @@ export function InterviewPrepWorkspace({
     setQuestionsModel("");
     setError("");
     setMessage("基于已确认的项目卡片和 JD 匹配分析，生成面试表达内容。");
+
+    // 从 localStorage 恢复上次未保存的面试输出（防刷新丢失）
+    const saved = loadDraft<{ oneMinuteIntro?: string; threeMinuteStory?: string; questions?: string[] }>(
+      draftInterviewKey(selectedProjectId)
+    );
+    if (saved) {
+      if (saved.oneMinuteIntro) setOneMinuteIntro(saved.oneMinuteIntro);
+      if (saved.threeMinuteStory) setThreeMinuteStory(saved.threeMinuteStory);
+      if (saved.questions?.length) setQuestions(saved.questions);
+    }
   }, [selectedProjectId, latestOutput]);
+
+  // 输出变化时自动暂存（生成结果刷新不丢）
+  useEffect(() => {
+    saveDraft(draftInterviewKey(selectedProjectId), {
+      oneMinuteIntro,
+      threeMinuteStory,
+      questions
+    });
+  }, [oneMinuteIntro, threeMinuteStory, questions, selectedProjectId]);
 
   const handleProjectChange = (projectId: string) => {
     router.push(`/interview-prep?projectId=${projectId}`);
@@ -113,7 +149,7 @@ export function InterviewPrepWorkspace({
     setError("");
 
     startGeneratingOneMin(async () => {
-      const result = await generateOneMinuteIntroAction(selectedProjectId);
+      const result = await generateOneMinuteIntroAction(selectedProjectId, selectedJdId ?? undefined);
 
       if (!result.success) {
         setError(result.message);
@@ -136,7 +172,7 @@ export function InterviewPrepWorkspace({
     setError("");
 
     startGeneratingThreeMin(async () => {
-      const result = await generateThreeMinuteStoryAction(selectedProjectId);
+      const result = await generateThreeMinuteStoryAction(selectedProjectId, selectedJdId ?? undefined);
 
       if (!result.success) {
         setError(result.message);
@@ -159,7 +195,7 @@ export function InterviewPrepWorkspace({
     setError("");
 
     startGeneratingQuestions(async () => {
-      const result = await generateInterviewQuestionsAction(selectedProjectId);
+      const result = await generateInterviewQuestionsAction(selectedProjectId, selectedJdId ?? undefined);
 
       if (!result.success) {
         setError(result.message);
@@ -227,17 +263,32 @@ export function InterviewPrepWorkspace({
             <h2 className="section-title">先选择要准备的项目</h2>
             <p className="section-copy mt-2">不同项目会基于各自的项目卡片和 JD 匹配分析生成对应的面试内容。</p>
           </div>
-          <select
-            value={selectedProjectId ?? ""}
-            onChange={(event) => handleProjectChange(event.target.value)}
-            className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name} · {project.targetRole}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-col gap-3 lg:w-full lg:max-w-sm">
+            <select
+              value={selectedProjectId ?? ""}
+              onChange={(event) => handleProjectChange(event.target.value)}
+              className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name} · {project.targetRole}
+                </option>
+              ))}
+            </select>
+            {jdRecords.length > 0 ? (
+              <select
+                value={selectedJdId ?? ""}
+                onChange={(event) => handleJdChange(event.target.value)}
+                className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              >
+                {jdRecords.map((jd, index) => (
+                  <option key={jd.id} value={jd.id}>
+                    目标 JD #{jdRecords.length - index} · {jd.hasSummary ? "已解析" : "未解析"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -307,6 +358,9 @@ export function InterviewPrepWorkspace({
       ) : null}
 
       {error ? <ErrorDisplay error={error} compact /> : null}
+      {isGeneratingOneMin || isGeneratingThreeMin || isGeneratingQuestions ? (
+        <GeneratingIndicator label="AI 正在生成面试内容" />
+      ) : null}
       {!error && <p className="text-sm leading-7 text-slate-600">{message}</p>}
 
       <section className="grid gap-6 xl:grid-cols-2">

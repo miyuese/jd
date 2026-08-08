@@ -8,9 +8,9 @@ import { generateResumeWithMemory } from "@/lib/memory-ai";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
 import { saveResumeRewriteContext } from "@/lib/stage9-data";
 import { getLatestProjectCard } from "@/lib/stage7-data";
-import { getLatestMatchAnalysis } from "@/lib/stage8-data";
+import { getLatestMatchAnalysis, getMatchAnalysisByJdRecord } from "@/lib/stage8-data";
 import { createInterviewOutputVersion } from "@/lib/stage10-data";
-import { listAbilityTags, listChunksByTag } from "@/lib/memory-data";
+import { listAbilityTags, listChunksByTagIds } from "@/lib/memory-data";
 
 const saveResumeContextSchema = z.object({
   content: z.string().trim().min(1, "请先确认简历上下文内容，再点击保存。")
@@ -41,13 +41,14 @@ type ActionResult =
 export async function generateResumeRewriteAction(
   projectId: string,
   resumeText: string,
-  rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused"
+  rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused",
+  jdId?: string
 ): Promise<ActionResult> {
   const userId = requireClerkUserId();
   const [project, projectCard, matchAnalysis] = await Promise.all([
     getWorkspaceProjectById(projectId, userId),
     getLatestProjectCard(projectId, userId),
-    getLatestMatchAnalysis(projectId, userId)
+    jdId ? getMatchAnalysisByJdRecord(jdId, userId) : getLatestMatchAnalysis(projectId, userId)
   ]);
 
   if (!project) {
@@ -84,13 +85,18 @@ export async function generateResumeRewriteAction(
 
     try {
       const confirmedTags = await listAbilityTags(userId);
-      const usableTags = confirmedTags.filter((tag) => tag.status === "CONFIRMED" || tag.status === "DRAFT");
+      const usableTags = confirmedTags
+        .filter((tag) => tag.status === "CONFIRMED" || tag.status === "DRAFT")
+        .slice(0, 8);
 
-      for (const tag of usableTags.slice(0, 8)) {
-        const chunks = await listChunksByTag(tag.id);
+      // 批量查询证据，避免 N+1 逐标签查询
+      const chunksByTag = await listChunksByTagIds(usableTags.map((tag) => tag.id));
+
+      for (const tag of usableTags) {
+        const chunks = chunksByTag.get(tag.id) ?? [];
         memoryEvidence.push(
           ...chunks.slice(0, 2).map((chunk) => ({
-            chunkId: chunk.id,
+            chunkId: chunk.chunkId,
             content: chunk.content,
             tagName: tag.name
           }))
@@ -211,7 +217,8 @@ export async function generateResumeFragmentRewriteAction(
   projectId: string,
   fullResumeText: string,
   selectedText: string,
-  rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused"
+  rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused",
+  jdId?: string
 ): Promise<ActionResult> {
   const parsed = fragmentRewriteSchema.safeParse({
     projectId,
@@ -231,7 +238,7 @@ export async function generateResumeFragmentRewriteAction(
   const [project, projectCard, matchAnalysis] = await Promise.all([
     getWorkspaceProjectById(projectId, userId),
     getLatestProjectCard(projectId, userId),
-    getLatestMatchAnalysis(projectId, userId)
+    jdId ? getMatchAnalysisByJdRecord(jdId, userId) : getLatestMatchAnalysis(projectId, userId)
   ]);
 
   if (!project || !projectCard || !matchAnalysis) {

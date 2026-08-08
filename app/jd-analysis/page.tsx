@@ -3,7 +3,14 @@ import { JdAnalysisWorkspace } from "@/components/jd-analysis-workspace";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { listWorkspaceProjects } from "@/lib/neon-db";
 import { getLatestProjectCard } from "@/lib/stage7-data";
-import { getLatestJdRecord, getLatestMatchAnalysis, listMatchAnalysisVersions } from "@/lib/stage8-data";
+import {
+  getJdRecordById,
+  getLatestJdRecord,
+  getLatestMatchAnalysis,
+  getMatchAnalysisByJdRecord,
+  listJdRecords,
+  listMatchAnalysisVersions
+} from "@/lib/stage8-data";
 
 export const metadata: Metadata = {
   title: "JD 分析"
@@ -12,7 +19,7 @@ export const metadata: Metadata = {
 export default async function JdAnalysisPage({
   searchParams
 }: {
-  searchParams?: { projectId?: string | string[] };
+  searchParams?: { projectId?: string | string[]; jdId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
   let dataLoadError = "";
@@ -31,7 +38,21 @@ export default async function JdAnalysisPage({
     : projects[0]?.id ?? null;
 
   if (!selectedProjectId) {
-    return <JdAnalysisWorkspace projects={[]} selectedProjectId={null} initialJdText="" jdSavedAt={null} projectCardExists={false} capabilitySummary={null} matchAnalysis={null} versions={[]} dataLoadError={dataLoadError} />;
+    return (
+      <JdAnalysisWorkspace
+        projects={[]}
+        selectedProjectId={null}
+        jdRecords={[]}
+        selectedJdId={null}
+        initialJdText=""
+        jdSavedAt={null}
+        projectCardExists={false}
+        capabilitySummary={null}
+        matchAnalysis={null}
+        versions={[]}
+        dataLoadError={dataLoadError}
+      />
+    );
   }
 
   const appendLoadError = (label: string, error: unknown) => {
@@ -40,22 +61,42 @@ export default async function JdAnalysisPage({
     dataLoadError = dataLoadError ? `${dataLoadError}\n${message}` : message;
   };
 
-  const [projectCardResult, jdRecordResult, matchAnalysisResult, versionsResult] = await Promise.allSettled([
+  const [projectCardResult, jdRecordsResult, latestJdResult, versionsResult] = await Promise.allSettled([
     getLatestProjectCard(selectedProjectId, userId),
+    listJdRecords(selectedProjectId, userId),
     getLatestJdRecord(selectedProjectId, userId),
-    getLatestMatchAnalysis(selectedProjectId, userId),
     listMatchAnalysisVersions(selectedProjectId, userId)
   ]);
 
   const projectCard = projectCardResult.status === "fulfilled" ? projectCardResult.value : null;
-  const jdRecord = jdRecordResult.status === "fulfilled" ? jdRecordResult.value : null;
-  const matchAnalysis = matchAnalysisResult.status === "fulfilled" ? matchAnalysisResult.value : null;
+  const jdRecords = jdRecordsResult.status === "fulfilled" ? jdRecordsResult.value : [];
+  const latestJd = latestJdResult.status === "fulfilled" ? latestJdResult.value : null;
   const versions = versionsResult.status === "fulfilled" ? versionsResult.value : [];
 
   if (projectCardResult.status === "rejected") appendLoadError("读取项目卡片", projectCardResult.reason);
-  if (jdRecordResult.status === "rejected") appendLoadError("读取 JD 记录", jdRecordResult.reason);
-  if (matchAnalysisResult.status === "rejected") appendLoadError("读取匹配分析", matchAnalysisResult.reason);
+  if (jdRecordsResult.status === "rejected") appendLoadError("读取 JD 记录", jdRecordsResult.reason);
+  if (latestJdResult.status === "rejected") appendLoadError("读取最新 JD", latestJdResult.reason);
   if (versionsResult.status === "rejected") appendLoadError("读取匹配分析版本", versionsResult.reason);
+
+  // 选中的 JD：URL 指定优先，否则用最新
+  const requestedJdId = Array.isArray(searchParams?.jdId) ? searchParams?.jdId[0] : searchParams?.jdId;
+  const selectedJdId = jdRecords.some((jd) => jd.id === requestedJdId)
+    ? requestedJdId ?? null
+    : (latestJd?.id ?? null);
+
+  let jdRecord = latestJd;
+  let matchAnalysis: Awaited<ReturnType<typeof getLatestMatchAnalysis>> = null;
+
+  if (selectedJdId) {
+    const [jdResult, matchResult] = await Promise.allSettled([
+      getJdRecordById(selectedJdId, userId),
+      getMatchAnalysisByJdRecord(selectedJdId, userId)
+    ]);
+    jdRecord = jdResult.status === "fulfilled" ? jdResult.value : null;
+    matchAnalysis = matchResult.status === "fulfilled" ? matchResult.value : null;
+    if (jdResult.status === "rejected") appendLoadError("读取选中 JD", jdResult.reason);
+    if (matchResult.status === "rejected") appendLoadError("读取匹配分析", matchResult.reason);
+  }
 
   const capabilitySummary = jdRecord?.capabilitySummary as
     | {
@@ -74,6 +115,15 @@ export default async function JdAnalysisPage({
         currentNeed: project.currentNeed
       }))}
       selectedProjectId={selectedProjectId}
+      jdRecords={jdRecords.map((jd) => ({
+        id: jd.id,
+        rawText: jd.rawText,
+        hasSummary: Boolean(
+          (jd.capabilitySummary as { responsibilities?: unknown[] } | null)?.responsibilities?.length
+        ),
+        updatedAt: jd.updatedAt.toISOString()
+      }))}
+      selectedJdId={selectedJdId}
       initialJdText={jdRecord?.rawText ?? ""}
       jdSavedAt={jdRecord?.updatedAt.toISOString() ?? null}
       projectCardExists={Boolean(projectCard)}

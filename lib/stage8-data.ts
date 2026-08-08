@@ -151,22 +151,8 @@ export async function getLatestJdRecord(projectId: string, clerkUserId: string) 
 
 export async function saveJdRecord(projectId: string, clerkUserId: string, rawText: string) {
   const sql = getSql();
-  const existing = await getLatestJdRecord(projectId, clerkUserId);
 
-  if (existing) {
-    const rows = (await sql.query(
-      `
-        UPDATE "JdRecord"
-        SET "rawText" = $1, "updatedAt" = NOW()
-        WHERE "id" = $2
-        RETURNING "id", "projectId", "clerkUserId", "rawText", "capabilitySummary", "createdAt", "updatedAt"
-      `,
-      [rawText, existing.id]
-    )) as JdRecordRow[];
-
-    return mapJdRecord(rows[0]);
-  }
-
+  // 始终创建新记录（支持同一项目关联多个 JD）
   const rows = (await sql.query(
     `
       INSERT INTO "JdRecord" (
@@ -179,6 +165,37 @@ export async function saveJdRecord(projectId: string, clerkUserId: string, rawTe
   )) as JdRecordRow[];
 
   return mapJdRecord(rows[0]);
+}
+
+/** 列出项目的全部 JD 记录（按更新时间倒序），支持多 JD 切换。 */
+export async function listJdRecords(projectId: string, clerkUserId: string) {
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT "id", "projectId", "clerkUserId", "rawText", "capabilitySummary", "createdAt", "updatedAt"
+      FROM "JdRecord"
+      WHERE "projectId" = $1 AND "clerkUserId" = $2
+      ORDER BY "updatedAt" DESC
+    `,
+    [projectId, clerkUserId]
+  )) as JdRecordRow[];
+
+  return rows.map(mapJdRecord);
+}
+
+export async function getJdRecordById(jdRecordId: string, clerkUserId: string) {
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT "id", "projectId", "clerkUserId", "rawText", "capabilitySummary", "createdAt", "updatedAt"
+      FROM "JdRecord"
+      WHERE "id" = $1 AND "clerkUserId" = $2
+      LIMIT 1
+    `,
+    [jdRecordId, clerkUserId]
+  )) as JdRecordRow[];
+
+  return rows[0] ? mapJdRecord(rows[0]) : null;
 }
 
 export async function updateJdCapabilitySummary(jdRecordId: string, capabilitySummary: unknown) {
@@ -212,6 +229,27 @@ export async function getLatestMatchAnalysis(projectId: string, clerkUserId: str
   return rows[0] ? mapMatchAnalysis(rows[0]) : null;
 }
 
+/** 按指定 JD 获取对应的匹配分析（多 JD 场景下每个 JD 拥有独立的匹配结果）。 */
+export async function getMatchAnalysisByJdRecord(jdRecordId: string, clerkUserId: string) {
+  if (!jdRecordId) {
+    return null;
+  }
+
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT "id", "projectId", "jdRecordId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+      FROM "MatchAnalysis"
+      WHERE "jdRecordId" = $1 AND "clerkUserId" = $2
+      ORDER BY "updatedAt" DESC
+      LIMIT 1
+    `,
+    [jdRecordId, clerkUserId]
+  )) as MatchAnalysisRow[];
+
+  return rows[0] ? mapMatchAnalysis(rows[0]) : null;
+}
+
 export async function saveGeneratedMatchAnalysis(
   projectId: string,
   jdRecordId: string,
@@ -229,7 +267,7 @@ export async function saveGeneratedMatchAnalysis(
   }
 ) {
   const sql = getSql();
-  const existing = await getLatestMatchAnalysis(projectId, clerkUserId);
+  const existing = await getMatchAnalysisByJdRecord(jdRecordId, clerkUserId);
   const matchedPointsPayload = JSON.stringify({ items: values.matchedPoints, plainExplanation: values.plainExplanations.matchedPoints });
   const gapPointsPayload = JSON.stringify({ items: values.gapPoints, plainExplanation: values.plainExplanations.gapPoints });
   const suggestionPointsPayload = JSON.stringify({ items: values.suggestionPoints, plainExplanation: values.plainExplanations.suggestionPoints });

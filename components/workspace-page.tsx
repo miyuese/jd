@@ -5,6 +5,33 @@ import { navItems } from "@/lib/navigation";
 
 const quickEntryItems = navItems.filter((item) => item.href !== "/workspace").slice(0, 6);
 
+const flowSteps = [
+  {
+    step: "①",
+    title: "新建项目",
+    description: "填写项目名称与目标岗位",
+    href: "/workspace"
+  },
+  {
+    step: "②",
+    title: "录入材料 + AI 复盘",
+    description: "简历材料 / 项目材料 → 项目卡片确认",
+    href: "/project-card"
+  },
+  {
+    step: "③",
+    title: "JD 解析 + 匹配分析",
+    description: "粘贴目标 JD → 能力摘要 → 匹配点/差距点",
+    href: "/jd-analysis"
+  },
+  {
+    step: "④",
+    title: "简历改写 + 面试准备",
+    description: "生成贴合 JD 的简历与面试讲稿",
+    href: "/resume-rewrite"
+  }
+];
+
 type WorkspacePageProps = {
   projectCount: number;
   projects: Array<{
@@ -38,6 +65,30 @@ export function WorkspacePage({ projectCount, projects }: WorkspacePageProps) {
       </section>
 
       <NewProjectWorkspace />
+
+      <section className="page-card p-6 sm:p-8">
+        <div className="border-b border-slate-100 pb-4">
+          <h2 className="section-title">推荐使用流程</h2>
+          <p className="section-copy mt-2">按这个顺序走，每个模块的依赖关系就理顺了。材料越完整，AI 生成的结果越可信。</p>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {flowSteps.map((flow) => (
+            <Link
+              key={flow.title}
+              href={flow.href}
+              className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-sm"
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-50 text-sm text-primary-700">
+                  {flow.step}
+                </span>
+                <span className="text-sm font-medium text-slate-900">{flow.title}</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">{flow.description}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <ProjectListSection projects={projects} />
 

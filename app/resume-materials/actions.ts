@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { saveResumeMaterial } from "@/lib/stage6-data";
-import { ingestText } from "@/lib/memory-data";
+import { autoIngestAndExtract } from "@/lib/memory-auto";
 
 const resumeMaterialSchema = z.object({
   content: z.string().trim().min(1, "请先粘贴已有简历内容，再点击保存。")
@@ -34,17 +34,13 @@ export async function saveResumeMaterialAction(content: string): Promise<SaveRes
   const userId = requireClerkUserId();
   const record = await saveResumeMaterial(userId, parsed.data.content);
 
-  // 自动同步到个人记忆系统（失败不阻塞主流程）
-  try {
-    await ingestText({
-      clerkUserId: userId,
-      sourceType: "RESUME",
-      title: "已有简历",
-      rawText: parsed.data.content
-    });
-  } catch {
-    // 记忆系统异常不影响简历保存
-  }
+  // 自动沉淀到记忆库并提取能力标签（幂等去重，失败静默，不阻塞保存）
+  await autoIngestAndExtract(userId, {
+    sourceType: "RESUME",
+    title: "已有简历",
+    rawText: parsed.data.content,
+    sourceRefId: record.id
+  });
 
   revalidatePath("/resume-materials");
   revalidatePath("/memory");

@@ -4,6 +4,7 @@ import { requireClerkUserId } from "@/lib/auth-scope";
 import { listWorkspaceProjects } from "@/lib/neon-db";
 import { getResumeRewriteInputs } from "@/lib/stage9-data";
 import { getAbilityTagStats, listAbilityGaps } from "@/lib/memory-data";
+import { getLatestJdRecord, listJdRecords } from "@/lib/stage8-data";
 
 export const metadata: Metadata = {
   title: "简历改写"
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 export default async function ResumeRewritePage({
   searchParams
 }: {
-  searchParams?: { projectId?: string | string[] };
+  searchParams?: { projectId?: string | string[]; jdId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
   const [projects, abilityGaps, abilityTagStats] = await Promise.all([
@@ -34,6 +35,8 @@ export default async function ResumeRewritePage({
       <ResumeRewriteWorkspace
         projects={[]}
         selectedProjectId={null}
+        jdRecords={[]}
+        selectedJdId={null}
         initialResumeText=""
         resumeSavedAt={null}
         projectCardExists={false}
@@ -44,7 +47,20 @@ export default async function ResumeRewritePage({
     );
   }
 
-  const { resumeMaterial, projectCard, matchAnalysis } = await getResumeRewriteInputs(selectedProjectId, userId);
+  const [jdRecords, latestJd] = await Promise.all([
+    listJdRecords(selectedProjectId, userId),
+    getLatestJdRecord(selectedProjectId, userId)
+  ]);
+  const requestedJdId = Array.isArray(searchParams?.jdId) ? searchParams?.jdId[0] : searchParams?.jdId;
+  const selectedJdId = jdRecords.some((jd) => jd.id === requestedJdId)
+    ? requestedJdId ?? null
+    : (latestJd?.id ?? null);
+
+  const { resumeMaterial, projectCard, matchAnalysis } = await getResumeRewriteInputs(
+    selectedProjectId,
+    userId,
+    selectedJdId ?? undefined
+  );
 
   // 雷达图数据：我的画像（来自记忆库能力标签）vs JD 要求（来自匹配分析的优先级）
   const myScores = {
@@ -76,6 +92,13 @@ export default async function ResumeRewritePage({
         currentNeed: project.currentNeed
       }))}
       selectedProjectId={selectedProjectId}
+      jdRecords={jdRecords.map((jd) => ({
+        id: jd.id,
+        rawText: jd.rawText,
+        hasSummary: Boolean((jd.capabilitySummary as { responsibilities?: unknown[] } | null)?.responsibilities?.length),
+        updatedAt: jd.updatedAt.toISOString()
+      }))}
+      selectedJdId={selectedJdId}
       initialResumeText={resumeMaterial?.rawText ?? ""}
       resumeSavedAt={resumeMaterial?.updatedAt.toISOString() ?? null}
       projectCardExists={Boolean(projectCard)}

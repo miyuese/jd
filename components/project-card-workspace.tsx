@@ -8,6 +8,12 @@ import {
   saveProjectCardVersionAction,
   updateProjectCardAction
 } from "@/app/project-card/actions";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-storage";
+import { GeneratingIndicator } from "@/components/generating-indicator";
+
+function draftCardKey(projectId: string | null) {
+  return `jd-helper:draft:card:${projectId ?? "none"}`;
+}
 import { EmptyState } from "@/components/empty-state";
 import { ErrorDisplay } from "@/components/error-display";
 
@@ -119,7 +125,9 @@ export function ProjectCardWorkspace({
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
 
   useEffect(() => {
-    setFormValues(initialCard);
+    // 优先恢复本地未保存的卡片编辑草稿，否则用服务端数据
+    const savedCard = loadDraft<ProjectCardData>(draftCardKey(selectedProjectId));
+    setFormValues(savedCard ?? initialCard);
     setGenerateError("");
     setSaveError("");
     setVersionError("");
@@ -131,12 +139,39 @@ export function ProjectCardWorkspace({
     setVersionMessage(versions.length > 0 ? "下方展示的是已保存的项目卡片版本。" : "当前还没有保存过项目卡片版本。");
   }, [initialCard, versions]);
 
+  // 卡片内容变化时自动暂存（编辑不丢失）
+  useEffect(() => {
+    if (formValues) {
+      saveDraft(draftCardKey(selectedProjectId), formValues);
+    }
+  }, [formValues, selectedProjectId]);
+
   const handleProjectChange = (projectId: string) => {
     router.push(`/project-card?projectId=${projectId}`);
   };
 
   const handleFieldChange = <K extends keyof ProjectCardData>(field: K, value: ProjectCardData[K]) => {
-    setFormValues((current) => (current ? { ...current, [field]: value } : current));
+    setFormValues((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const next: ProjectCardData = { ...current, [field]: value };
+
+      // 内容字段被修改时，自动把对应事实状态置回「待确认」，避免"改了内容却没确认"
+      const contentFieldToStatus: Record<string, "backgroundFactStatus" | "responsibilityFactStatus" | "resultFactStatus"> = {
+        background: "backgroundFactStatus",
+        responsibility: "responsibilityFactStatus",
+        result: "resultFactStatus"
+      };
+      const statusField = contentFieldToStatus[field];
+
+      if (statusField && typeof value === "string" && value !== (initialCard?.[field] as string | undefined)) {
+        next[statusField] = "NEEDS_CONFIRMATION";
+      }
+
+      return next;
+    });
   };
 
   const handleGenerateCard = () => {
@@ -207,6 +242,8 @@ export function ProjectCardWorkspace({
       }
 
       setVersionMessage(result.message);
+      // 已保存为版本，清除本地草稿
+      clearDraft(draftCardKey(selectedProjectId));
       router.refresh();
     });
   };
@@ -284,6 +321,7 @@ export function ProjectCardWorkspace({
             <p className="mt-3 text-sm text-slate-600">{generateMessage}</p>
             {responseModel ? <div className="mt-2 text-xs text-slate-500">模型：{responseModel}</div> : null}
             {generateError ? <ErrorDisplay error={generateError} compact /> : null}
+            {isGenerating ? <GeneratingIndicator label="AI 正在生成项目卡片草稿" /> : null}
             <button type="button" onClick={handleGenerateCard} disabled={isGenerating || !selectedProjectId} className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
               {isGenerating ? "生成中..." : "生成项目卡片草稿"}
             </button>
