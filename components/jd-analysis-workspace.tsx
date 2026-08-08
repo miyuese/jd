@@ -284,7 +284,7 @@ export function JdAnalysisWorkspace({
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
-        <span className="soft-chip">阶段 8 · Quest 8.1-8.5</span>
+        <span className="soft-chip">JD 分析</span>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">JD 分析</h1>
         {dataLoadError ? (
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -317,7 +317,7 @@ export function JdAnalysisWorkspace({
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <span className="soft-chip">阶段 8 · Quest 8.1-8.5</span>
+            <span className="soft-chip">岗位匹配</span>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">JD 分析</h1>
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">把已确认项目卡片与目标 JD 连接起来，产出岗位能力摘要、匹配分析草稿和可确认的表达重点。</p>
           </div>
@@ -345,7 +345,7 @@ export function JdAnalysisWorkspace({
             <h2 className="section-title">先选择要分析的项目</h2>
             <p className="section-copy mt-2">不同项目会有各自独立的 JD、摘要、匹配分析和版本记录。</p>
           </div>
-          <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm">
+          <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm">
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name} · {project.targetRole}
@@ -358,7 +358,7 @@ export function JdAnalysisWorkspace({
       {!projectCardExists ? (
         <section className="page-card p-6 sm:p-8">
           <div className="rounded-[24px] border border-dashed border-sky-200 bg-sky-50/65 p-6 text-sm leading-7 text-slate-600">当前项目还没有项目卡片，暂时无法开始匹配分析。先去项目卡片页生成并确认项目卡片，再回到这里继续。</div>
-          <Link href={selectedProjectId ? `/project-card?projectId=${selectedProjectId}` : "/project-card"} className="mt-6 inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-sky-700">
+          <Link href={selectedProjectId ? `/project-card?projectId=${selectedProjectId}` : "/project-card"} className="mt-6 inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700">
             前往项目卡片页
           </Link>
         </section>
@@ -391,7 +391,7 @@ export function JdAnalysisWorkspace({
           <section className="page-card p-6 sm:p-8">
             <div className="flex flex-col gap-4 border-b border-sky-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <span className="soft-chip">Quest 8.1 · JD 原文保存</span>
+                <span className="soft-chip">目标 JD</span>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">录入目标 JD</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-600">先把目标岗位 JD 原文保存下来，后续所有岗位摘要和匹配分析都会基于这里的内容展开。</p>
               </div>
@@ -410,7 +410,7 @@ export function JdAnalysisWorkspace({
 
             <div className="mt-5 flex flex-col gap-3 border-t border-sky-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm leading-6 text-slate-500">{jdMessage}</p>
-              <button type="button" onClick={handleSaveJd} disabled={isSavingJd || !selectedProjectId} className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300">
+              <button type="button" onClick={handleSaveJd} disabled={isSavingJd || !selectedProjectId} className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300">
                 {isSavingJd ? "正在保存 JD..." : "保存 JD 原文"}
               </button>
             </div>
@@ -419,7 +419,7 @@ export function JdAnalysisWorkspace({
           <section className="page-card p-6 sm:p-8">
             <div className="flex flex-col gap-4 border-b border-sky-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <span className="soft-chip">Quest 8.2 · 能力摘要</span>
+                <span className="soft-chip">能力摘要</span>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">解析 JD</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-600">系统会把岗位原文提炼为职责重点、能力关键词和优先级判断。</p>
               </div>
@@ -470,7 +470,7 @@ export function JdAnalysisWorkspace({
           <section className="page-card p-6 sm:p-8">
             <div className="flex flex-col gap-4 border-b border-sky-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <span className="soft-chip">Quest 8.3 · Quest 8.4</span>
+                <span className="soft-chip">匹配分析</span>
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">匹配分析草稿与重点确认</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-600">系统会优先输出更具体的岗位匹配判断，并在每个模块下补一段“说人话版”解释，帮助你更快看懂这份分析到底在说什么。</p>
               </div>
@@ -494,10 +494,10 @@ export function JdAnalysisWorkspace({
                     <label className="text-sm font-medium text-slate-800">匹配点</label>
                     <span className="text-xs text-slate-400">每行一条</span>
                   </div>
-                  <textarea rows={5} value={analysisForm.matchedPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, matchedPoints: event.target.value } : current))} className="mt-4 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                  <textarea rows={5} value={analysisForm.matchedPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, matchedPoints: event.target.value } : current))} className="mt-4 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                   <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
                     <label className="block text-sm font-medium text-sky-800">说人话版</label>
-                    <textarea rows={4} value={analysisForm.plainMatchedPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, plainMatchedPoints: event.target.value } : current))} className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                    <textarea rows={4} value={analysisForm.plainMatchedPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, plainMatchedPoints: event.target.value } : current))} className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                   </div>
                 </div>
 
@@ -506,10 +506,10 @@ export function JdAnalysisWorkspace({
                     <label className="text-sm font-medium text-slate-800">差距点</label>
                     <span className="text-xs text-slate-400">每行一条</span>
                   </div>
-                  <textarea rows={5} value={analysisForm.gapPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, gapPoints: event.target.value } : current))} className="mt-4 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                  <textarea rows={5} value={analysisForm.gapPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, gapPoints: event.target.value } : current))} className="mt-4 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                   <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
                     <label className="block text-sm font-medium text-sky-800">说人话版</label>
-                    <textarea rows={4} value={analysisForm.plainGapPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, plainGapPoints: event.target.value } : current))} className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                    <textarea rows={4} value={analysisForm.plainGapPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, plainGapPoints: event.target.value } : current))} className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                   </div>
                 </div>
 
@@ -518,22 +518,22 @@ export function JdAnalysisWorkspace({
                     <label className="text-sm font-medium text-slate-800">补充建议</label>
                     <span className="text-xs text-slate-400">每行一条</span>
                   </div>
-                  <textarea rows={5} value={analysisForm.suggestionPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, suggestionPoints: event.target.value } : current))} className="mt-4 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                  <textarea rows={5} value={analysisForm.suggestionPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, suggestionPoints: event.target.value } : current))} className="mt-4 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                   <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
                     <label className="block text-sm font-medium text-sky-800">说人话版</label>
-                    <textarea rows={4} value={analysisForm.plainSuggestionPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, plainSuggestionPoints: event.target.value } : current))} className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                    <textarea rows={4} value={analysisForm.plainSuggestionPoints} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, plainSuggestionPoints: event.target.value } : current))} className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                   </div>
                 </div>
 
                 <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 p-5">
                   <label className="block text-sm font-medium text-slate-800">匹配总结</label>
-                  <textarea rows={4} value={analysisForm.summary} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, summary: event.target.value } : current))} className="mt-4 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
+                  <textarea rows={4} value={analysisForm.summary} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, summary: event.target.value } : current))} className="mt-4 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100" />
                 </div>
 
                 <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <label className="block text-sm font-medium text-slate-800">匹配分析状态</label>
-                    <select value={analysisForm.status} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, status: event.target.value as MatchAnalysisData["status"] } : current))} className="rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100">
+                    <select value={analysisForm.status} onChange={(event) => setAnalysisForm((current) => (current ? { ...current, status: event.target.value as MatchAnalysisData["status"] } : current))} className="rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100">
                       {matchStatusOptions.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
@@ -543,7 +543,7 @@ export function JdAnalysisWorkspace({
 
                 <div className="flex flex-col gap-3 border-t border-sky-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm leading-6 text-slate-500">最近分析保存：{formatDateTime(matchAnalysis?.updatedAt ?? null)}</p>
-                  <button type="button" onClick={handleSaveAnalysis} disabled={isSavingAnalysis} className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300">
+                  <button type="button" onClick={handleSaveAnalysis} disabled={isSavingAnalysis} className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300">
                     {isSavingAnalysis ? "正在保存分析..." : "保存当前匹配分析"}
                   </button>
                 </div>

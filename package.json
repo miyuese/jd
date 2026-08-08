@@ -13,6 +13,7 @@
     "prisma:migrate": "dotenv -e .env.local -- node scripts/prisma-command.js --use-pooled-direct-url migrate dev",
     "prisma:migrate:pooled": "dotenv -e .env.local -- node scripts/prisma-command.js --use-pooled-direct-url migrate dev",
     "db:apply-stage4": "dotenv -e .env.local -- node scripts/apply-stage4-sql.js",
+    "db:apply-memory": "dotenv -e .env.local -- node scripts/apply-memory-sql.js",
     "prisma:studio": "dotenv -e .env.local -- node scripts/prisma-command.js studio",
     "prisma:validate": "dotenv -e .env.local -- node scripts/prisma-command.js validate"
   },

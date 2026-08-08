@@ -40,24 +40,40 @@ export function ProjectListSection({ projects }: { projects: ProjectListItem[] }
         </div>
       ) : (
         <div className="mt-4 space-y-3">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              href={`/project-card?projectId=${project.id}`}
-              className="block rounded-lg border border-slate-100 p-4 transition hover:border-slate-200 hover:bg-slate-50"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-medium text-slate-900">{project.name}</h3>
-                  <p className="mt-1 text-sm text-slate-500">{project.targetRole}</p>
+          {projects.map((project, index) => {
+            const iconTones = [
+              "bg-primary-100 text-primary-700",
+              "bg-teal-100 text-teal-700",
+              "bg-amber-100 text-amber-700",
+              "bg-pink-100 text-pink-700"
+            ];
+
+            return (
+              <Link
+                key={project.id}
+                href={`/project-card?projectId=${project.id}`}
+                className="group flex items-start gap-4 rounded-3xl border border-slate-100 bg-white p-5 transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md"
+              >
+                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-medium ${iconTones[index % iconTones.length]}`}>
+                  {project.name.slice(0, 1)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-medium text-slate-900">{project.name}</h3>
+                      <p className="mt-0.5 text-sm text-slate-500">{project.targetRole}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-slate-50 px-2.5 py-1 text-xs text-slate-400">
+                      {formatDate(project.createdAt)}
+                    </span>
+                  </div>
+                  {project.currentNeed && (
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 line-clamp-2">{project.currentNeed}</p>
+                  )}
                 </div>
-                <span className="text-xs text-slate-400">{formatDate(project.createdAt)}</span>
-              </div>
-              {project.currentNeed && (
-                <p className="mt-2 text-sm text-slate-600 line-clamp-2">{project.currentNeed}</p>
-              )}
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>

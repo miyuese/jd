@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { generateResumeFragmentRewrite, generateResumeRewriteDraft } from "@/lib/ai-config";
+import { generateResumeWithMemory } from "@/lib/memory-ai";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
 import { saveResumeRewriteContext } from "@/lib/stage9-data";
 import { getLatestProjectCard } from "@/lib/stage7-data";
 import { getLatestMatchAnalysis } from "@/lib/stage8-data";
 import { createInterviewOutputVersion } from "@/lib/stage10-data";
+import { listAbilityTags, listChunksByTag } from "@/lib/memory-data";
 
 const saveResumeContextSchema = z.object({
   content: z.string().trim().min(1, "请先确认简历上下文内容，再点击保存。")
@@ -77,27 +79,65 @@ export async function generateResumeRewriteAction(
   }
 
   try {
-    const result = await generateResumeRewriteDraft({
-      resumeText,
-      rewriteMode,
-      projectCard: {
-        title: projectCard.title ?? project.name,
-        background: projectCard.background ?? "",
-        responsibility: projectCard.responsibility ?? "",
-        result: projectCard.result ?? ""
-      },
-      matchAnalysis: {
-        matchedPoints: matchAnalysis.matchedPoints as string[],
-        gapPoints: matchAnalysis.gapPoints as string[],
-        suggestionPoints: matchAnalysis.suggestionPoints as string[],
-        summary: matchAnalysis.summary ?? "",
-        plainExplanations: matchAnalysis.plainExplanations as {
-          matchedPoints: string;
-          gapPoints: string;
-          suggestionPoints: string;
-        }
+    // 从记忆库召回已确认标签的证据（流程 C：按 JD 动态调用）
+    let memoryEvidence: Array<{ chunkId: string; content: string; tagName?: string }> = [];
+
+    try {
+      const confirmedTags = await listAbilityTags(userId);
+      const usableTags = confirmedTags.filter((tag) => tag.status === "CONFIRMED" || tag.status === "DRAFT");
+
+      for (const tag of usableTags.slice(0, 8)) {
+        const chunks = await listChunksByTag(tag.id);
+        memoryEvidence.push(
+          ...chunks.slice(0, 2).map((chunk) => ({
+            chunkId: chunk.id,
+            content: chunk.content,
+            tagName: tag.name
+          }))
+        );
       }
-    });
+
+      memoryEvidence = memoryEvidence.slice(0, 12);
+    } catch {
+      // 记忆库不可用时退化为普通改写
+    }
+
+    const projectCardPayload = {
+      title: projectCard.title ?? project.name,
+      background: projectCard.background ?? "",
+      responsibility: projectCard.responsibility ?? "",
+      result: projectCard.result ?? ""
+    };
+    const matchAnalysisPayload = {
+      matchedPoints: matchAnalysis.matchedPoints as string[],
+      gapPoints: matchAnalysis.gapPoints as string[],
+      suggestionPoints: matchAnalysis.suggestionPoints as string[],
+      summary: matchAnalysis.summary ?? "",
+      plainExplanations: matchAnalysis.plainExplanations as {
+        matchedPoints: string;
+        gapPoints: string;
+        suggestionPoints: string;
+      }
+    };
+
+    const result = memoryEvidence.length > 0
+      ? await generateResumeWithMemory({
+          resumeText,
+          projectCard: projectCardPayload,
+          matchAnalysis: {
+            matchedPoints: matchAnalysisPayload.matchedPoints,
+            gapPoints: matchAnalysisPayload.gapPoints,
+            suggestionPoints: matchAnalysisPayload.suggestionPoints,
+            summary: matchAnalysisPayload.summary
+          },
+          memoryEvidence
+        })
+      : await generateResumeRewriteDraft({
+          resumeText,
+          rewriteMode,
+          projectCard: projectCardPayload,
+          matchAnalysis: matchAnalysisPayload
+        });
 
     const rewriteModeLabels: Record<string, string> = {
       "balanced": "平衡版",
@@ -110,7 +150,14 @@ export async function generateResumeRewriteAction(
       projectId,
       userId,
       `简历改写 · ${rewriteModeLabels[rewriteMode] ?? rewriteMode} · ${project.name}`,
-      { type: "RESUME_REWRITE", rewriteMode, ...result },
+      {
+        type: "RESUME_REWRITE",
+        rewriteMode,
+        rewrite: result.rewrite,
+        reasoning: result.reasoning,
+        highlights: result.highlights,
+        memoryEnhanced: memoryEvidence.length > 0
+      },
       projectCard.id,
       matchAnalysis.id
     );
@@ -120,7 +167,9 @@ export async function generateResumeRewriteAction(
 
     return {
       success: true,
-      message: "简历改写草稿已生成并保存为输出版本，可以对照原文判断是否应用到当前简历上下文。",
+      message: memoryEvidence.length > 0
+        ? "简历改写草稿已生成（已调用记忆库中的能力标签与证据），并保存为输出版本。"
+        : "简历改写草稿已生成并保存为输出版本，可以对照原文判断是否应用到当前简历上下文。",
       rewrite: result.rewrite,
       reasoning: result.reasoning,
       highlights: result.highlights,

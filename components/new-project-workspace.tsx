@@ -36,7 +36,7 @@ export function NewProjectWorkspace() {
   const [submittedProject, setSubmittedProject] = useState<ProjectFormValues | null>(null);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [submitMessage, setSubmitMessage] = useState(
-    "当前还没有数据库提交结果。填写左侧表单后点击按钮，这里会显示保存结果和下一步提示。"
+    "填写左侧表单并提交后，这里会显示保存结果。"
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -122,20 +122,20 @@ export function NewProjectWorkspace() {
     <section className="page-card p-6 sm:p-8">
         <div className="mb-6 flex flex-col gap-3 border-b border-sky-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <span className="soft-chip">Quest 5.2 · 用户归属绑定</span>
+            <span className="soft-chip">项目复盘</span>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">新建项目复盘任务</h2>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
-              左侧填写项目基础信息，右侧即时预览项目草稿。当前版本会在提交后把项目真实保存到 Neon 数据库，并自动绑定到当前登录账号的工作台列表。
+              填写项目基础信息，右侧会实时预览草稿。提交后项目将保存到你的工作台，之后可继续录入材料、完成 JD 分析和表达生成。
             </p>
           </div>
           <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-sky-800">
-            当前状态：必填校验 + 用户隔离保存 + 列表刷新
+            保存到你的工作台
           </div>
         </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_340px]">
         <form className="space-y-5" onSubmit={form.handleSubmit(handleCreateProject)} noValidate>
-          <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 p-5">
+          <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 dark:bg-slate-800/50 p-5">
             <label className="block text-sm font-medium text-slate-800" htmlFor="projectName">
               项目名称
             </label>
@@ -144,7 +144,7 @@ export function NewProjectWorkspace() {
               id="projectName"
               type="text"
               placeholder="例如：AI 面试助手 MVP 从 0 到 1"
-              className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 dark:text-slate-100 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
               {...form.register("projectName")}
             />
             {form.formState.errors.projectName ? (
@@ -152,7 +152,7 @@ export function NewProjectWorkspace() {
             ) : null}
           </div>
 
-          <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 p-5">
+          <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 dark:bg-slate-800/50 p-5">
             <label className="block text-sm font-medium text-slate-800" htmlFor="targetRole">
               目标岗位
             </label>
@@ -161,7 +161,7 @@ export function NewProjectWorkspace() {
               id="targetRole"
               type="text"
               placeholder="例如：AI 产品经理 / 技术产品经理"
-              className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 dark:text-slate-100 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
               {...form.register("targetRole")}
             />
             {form.formState.errors.targetRole ? (
@@ -169,7 +169,7 @@ export function NewProjectWorkspace() {
             ) : null}
           </div>
 
-          <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 p-5">
+          <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 dark:bg-slate-800/50 p-5">
             <label className="block text-sm font-medium text-slate-800" htmlFor="currentNeed">
               当前需求
             </label>
@@ -178,7 +178,7 @@ export function NewProjectWorkspace() {
               id="currentNeed"
               rows={5}
               placeholder="例如：我想先把项目背景、职责和结果讲清楚，再针对 AI PM 岗位做定制化表达。"
-              className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 dark:text-slate-100 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
               {...form.register("currentNeed")}
             />
             {form.formState.errors.currentNeed ? (
@@ -187,13 +187,13 @@ export function NewProjectWorkspace() {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-sky-100 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-slate-500">提交后会真实保存到数据库，并只出现在当前登录账号的项目列表中。</p>
+            <p className="text-sm leading-6 text-slate-500">提交后项目会保存到你的工作台，随时可以回来继续完善。</p>
             <button
               type="submit"
               disabled={isPending}
-              className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300"
+              className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
             >
-              {isPending ? "正在保存项目..." : "创建数据库项目"}
+              {isPending ? "正在保存..." : "保存项目"}
             </button>
           </div>
         </form>
@@ -230,23 +230,19 @@ export function NewProjectWorkspace() {
           </div>
 
           <div className="rounded-[24px] border border-sky-100 bg-sky-50/70 p-5 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900">数据库提交结果</h3>
+            <h3 className="text-lg font-semibold text-slate-900">保存状态</h3>
             <p className="mt-2 text-sm leading-7 text-slate-600">{submitMessage}</p>
 
             {submitError ? <p className="mt-3 text-sm text-rose-500">{submitError}</p> : null}
 
             <div className="mt-4 space-y-3 rounded-2xl bg-white/85 p-4">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-slate-500">最近提交</span>
+                <span className="text-slate-500">最近保存</span>
                 <span className="font-medium text-slate-900">{formatDateTime(submittedAt)}</span>
               </div>
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="text-slate-500">状态</span>
-                <span className="font-medium text-sky-700">{submittedProject ? "已保存到当前账号" : "等待提交"}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-slate-500">数据位置</span>
-                <span className="font-medium text-slate-900">Neon + Prisma</span>
+                <span className="font-medium text-sky-700">{submittedProject ? "已保存到工作台" : "等待提交"}</span>
               </div>
             </div>
           </div>

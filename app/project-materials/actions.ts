@@ -10,6 +10,7 @@ import {
   getLatestProjectMaterial,
   saveProjectMaterial
 } from "@/lib/stage6-data";
+import { ingestText } from "@/lib/memory-data";
 
 const projectMaterialSchema = z.object({
   projectId: z.string().trim().min(1, "缺少项目信息，请重新选择项目。"),
@@ -57,7 +58,21 @@ export async function saveProjectMaterialAction(projectId: string, content: stri
 
   const record = await saveProjectMaterial(parsed.data.projectId, userId, parsed.data.content);
 
+  // 自动同步到个人记忆系统（失败不阻塞主流程）
+  try {
+    await ingestText({
+      clerkUserId: userId,
+      sourceType: "PROJECT_MATERIAL",
+      title: `项目材料 · ${project.name}`,
+      rawText: parsed.data.content,
+      projectId: parsed.data.projectId
+    });
+  } catch {
+    // 记忆系统异常不影响项目材料保存
+  }
+
   revalidatePath("/project-materials");
+  revalidatePath("/memory");
 
   return {
     success: true,
@@ -143,7 +158,21 @@ export async function saveQuestionAnswerAction(
     parsed.data.answerText
   );
 
+  // 自动同步到个人记忆系统（失败不阻塞主流程）
+  try {
+    await ingestText({
+      clerkUserId: userId,
+      sourceType: "INTERVIEW_ANSWER",
+      title: `采访问答 · ${project.name}`,
+      rawText: `问：${parsed.data.questionText}\n答：${parsed.data.answerText}`,
+      projectId: parsed.data.projectId
+    });
+  } catch {
+    // 记忆系统异常不影响问答保存
+  }
+
   revalidatePath("/project-materials");
+  revalidatePath("/memory");
 
   return {
     success: true,

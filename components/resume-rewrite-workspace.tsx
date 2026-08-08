@@ -233,7 +233,7 @@ export function ResumeRewriteWorkspace({
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
-        <span className="soft-chip">阶段 9 · Quest 9.1-9.3</span>
+        <span className="soft-chip">简历改写</span>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">简历改写</h1>
         <div className="mt-6">
           <EmptyState
@@ -260,7 +260,7 @@ export function ResumeRewriteWorkspace({
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <span className="soft-chip">阶段 9 · Quest 9.1-9.3</span>
+            <span className="soft-chip">岗位定制</span>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">简历改写</h1>
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">把已确认的项目事实和岗位匹配重点转成更贴当前 JD 的简历项目描述，并写回当前简历上下文。</p>
           </div>
@@ -282,7 +282,7 @@ export function ResumeRewriteWorkspace({
             <h2 className="section-title">先选择要改写的项目</h2>
             <p className="section-copy mt-2">不同项目会基于各自的项目卡片和 JD 匹配分析生成对应的简历改写草稿。</p>
           </div>
-          <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm">
+          <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm">
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name} · {project.targetRole}
@@ -299,7 +299,7 @@ export function ResumeRewriteWorkspace({
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
             {!projectCardExists ? (
-              <Link href={selectedProjectId ? `/project-card?projectId=${selectedProjectId}` : "/project-card"} className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-sky-700">
+              <Link href={selectedProjectId ? `/project-card?projectId=${selectedProjectId}` : "/project-card"} className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700">
                 前往项目卡片页
               </Link>
             ) : null}
@@ -316,7 +316,7 @@ export function ResumeRewriteWorkspace({
         <section className="page-card p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
             <div>
-              <span className="soft-chip">Quest 9.1 · Quest 9.2</span>
+              <span className="soft-chip">改写对比</span>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">原文与改写稿对比</h2>
               <p className="mt-2 text-sm leading-7 text-slate-600">左侧保留当前简历原文，右侧展示针对当前项目生成的改写稿。</p>
             </div>
@@ -385,7 +385,7 @@ export function ResumeRewriteWorkspace({
         <section className="page-card p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
             <div>
-              <span className="soft-chip">Quest 9.3 · 应用改写</span>
+              <span className="soft-chip">应用改写</span>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">当前简历上下文</h2>
               <p className="mt-2 text-sm leading-7 text-slate-600">这里是可编辑的简历上下文。基础版会把改写稿插入编辑区，再由你确认后保存。</p>
             </div>
@@ -419,7 +419,7 @@ export function ResumeRewriteWorkspace({
                   读取当前选区
                 </button>
               </div>
-              <textarea rows={4} value={selectedFragment} readOnly className="mt-3 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none" placeholder="先在上方简历上下文编辑区里选中一段原文，再点“读取当前选区”或直接选择文本。" />
+              <textarea rows={4} value={selectedFragment} readOnly className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none" placeholder="先在上方简历上下文编辑区里选中一段原文，再点“读取当前选区”或直接选择文本。" />
               <button type="button" onClick={handleGenerateFragmentRewrite} disabled={isGeneratingFragment || !selectedFragment.trim()} className="mt-4 inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
                 {isGeneratingFragment ? "正在生成片段改写..." : "生成片段改写"}
               </button>
@@ -439,7 +439,7 @@ export function ResumeRewriteWorkspace({
                   </div>
                   {fragmentRewriteReasoning ? <div className="mt-3 text-sm leading-7 text-slate-500">{fragmentRewriteReasoning}</div> : null}
                   <div className="mt-4 flex flex-wrap gap-3">
-                    <button type="button" onClick={handleConfirmFragmentReplace} className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-sky-700">
+                    <button type="button" onClick={handleConfirmFragmentReplace} className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700">
                       确认替换选中区域
                     </button>
                     <button type="button" onClick={() => setShowFragmentPreview(false)} className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-white px-5 py-3 text-sm font-medium text-sky-700 transition hover:border-sky-300">
@@ -457,7 +457,7 @@ export function ResumeRewriteWorkspace({
             <button type="button" onClick={handleApplyRewrite} disabled={applyMode === "fragment-rewrite" ? !fragmentRewriteDraft.trim() : !rewriteDraft.trim()} className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-white px-5 py-3 text-sm font-medium text-sky-700 transition hover:border-sky-300 disabled:cursor-not-allowed disabled:text-slate-400">
               应用改写到编辑区
             </button>
-            <button type="button" onClick={handleSaveContext} disabled={isSavingContext} className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300">
+            <button type="button" onClick={handleSaveContext} disabled={isSavingContext} className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300">
               {isSavingContext ? "正在保存简历上下文..." : "保存当前简历上下文"}
             </button>
           </div>

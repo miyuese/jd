@@ -6,6 +6,12 @@ export const navItems = [
     description: "项目管理与概览"
   },
   {
+    href: "/memory",
+    label: "记忆库",
+    icon: "🧠",
+    description: "个人记忆与能力画像"
+  },
+  {
     href: "/resume-materials",
     label: "简历材料",
     icon: "📄",

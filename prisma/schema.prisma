@@ -53,14 +53,14 @@ model ResumeMaterial {
 }
 
 model Project {
-  id              String               @id @default(cuid())
+  id              String                 @id @default(cuid())
   clerkUserId     String
   name            String
   targetRole      String
-  currentNeed     String               @db.Text
-  status          ProjectStatus        @default(DRAFT)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  currentNeed     String                 @db.Text
+  status          ProjectStatus          @default(DRAFT)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
   materials       ProjectMaterial[]
   questionAnswers QuestionAnswerRecord[]
   projectCards    ProjectCard[]
@@ -139,15 +139,97 @@ model MatchAnalysis {
 }
 
 model VersionRecord {
-  id                    String      @id @default(cuid())
-  projectId             String
-  clerkUserId           String
-  type                  VersionType
-  title                 String
-  content               Json
+  id                     String           @id @default(cuid())
+  projectId              String
+  clerkUserId            String
+  type                   VersionType
+  title                  String
+  content                Json
   sourceResumeMaterialId String?
-  sourceProjectCardId   String?
-  sourceMatchAnalysisId String?
-  createdAt             DateTime    @default(now())
-  project               Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceProjectCardId    String?
+  sourceMatchAnalysisId  String?
+  createdAt              DateTime         @default(now())
+  project                Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  citations              JdOutputCitation[]
+}
+
+// ========== 个人记忆系统（V1.1，Jd 前缀避免与原作者表冲突） ==========
+
+enum MemorySourceType {
+  RESUME
+  PROJECT_MATERIAL
+  INTERVIEW_ANSWER
+  INTERVIEW_FEEDBACK
+  REFLECTION
+  MANUAL
+}
+
+enum AbilityCategory {
+  PERSONA
+  GENERAL
+  ROLE_SPECIFIC
+}
+
+enum TagStatus {
+  DRAFT
+  CONFIRMED
+  REJECTED
+}
+
+enum CitationKind {
+  DIRECT_QUOTE
+  PARAPHRASE
+  INFERENCE
+}
+
+model JdMemorySource {
+  id          String            @id @default(cuid())
+  clerkUserId String
+  sourceType  MemorySourceType
+  title       String?
+  rawText     String            @db.Text
+  sourceRefId String?
+  projectId   String?
+  createdAt   DateTime          @default(now())
+  chunks      JdMemoryChunk[]
+}
+
+model JdMemoryChunk {
+  id         String          @id @default(cuid())
+  sourceId   String
+  content    String          @db.Text
+  chunkIndex Int             @default(0)
+  createdAt  DateTime        @default(now())
+  source     JdMemorySource  @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+}
+
+model JdAbilityTag {
+  id          String          @id @default(cuid())
+  clerkUserId String
+  name        String
+  category    AbilityCategory
+  description String?         @db.Text
+  confidence  Float           @default(0.5)
+  status      TagStatus       @default(DRAFT)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model JdOutputCitation {
+  id          String        @id @default(cuid())
+  clerkUserId String
+  versionId   String
+  sentenceId  String
+  chunkId     String
+  kind        CitationKind  @default(PARAPHRASE)
+  createdAt   DateTime      @default(now())
+  version     VersionRecord @relation(fields: [versionId], references: [id], onDelete: Cascade)
+}
+
+// 标签 ↔ 证据多对多链接表
+model JdMemoryTagChunk {
+  tagId   String
+  chunkId String
+
+  @@id([tagId, chunkId])
 }

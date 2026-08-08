@@ -10,11 +10,11 @@ type AuthControlsProps = {
 export function AuthControls({ clerkEnabled }: AuthControlsProps) {
   if (!clerkEnabled) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-left shadow-sm xl:min-w-[280px]">
-        <div className="text-xs text-amber-700">登录配置</div>
-        <div className="mt-1 text-sm font-medium text-slate-900">未检测到 Clerk 环境变量</div>
+      <div className="rounded-2xl border border-teal-200 bg-teal-50/90 px-4 py-3 text-left shadow-sm xl:min-w-[280px]">
+        <div className="text-xs text-teal-700">开发模式</div>
+        <div className="mt-1 text-sm font-medium text-slate-900">无需登录，功能已全部可用</div>
         <p className="mt-1 text-xs leading-6 text-slate-600">
-          先把 `.env.local` 中的 Clerk key 配好，再使用注册、登录和退出功能。
+          当前以开发用户身份运行，记忆库、简历改写、面试准备等都能正常使用。只有正式部署上线时才需要配置 Clerk 登录。
         </p>
       </div>
     );
@@ -28,7 +28,7 @@ export function AuthControls({ clerkEnabled }: AuthControlsProps) {
         <div className="mt-3 flex flex-wrap gap-2">
           <Link
             href="/sign-in"
-            className="inline-flex items-center rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
+            className="inline-flex items-center rounded-full bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
           >
             去登录
           </Link>

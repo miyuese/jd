@@ -6,6 +6,11 @@
   color-scheme: light;
 }
 
+/* 深色模式：class 策略，html.dark 时生效 */
+.dark {
+  color-scheme: dark;
+}
+
 html {
   min-height: 100%;
 }
@@ -14,31 +19,105 @@ body {
   min-height: 100vh;
   background: #f8fafc;
   color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.dark body {
+  background: #0b1020;
+  color: #e2e8f0;
 }
 
 * {
   border-color: #e2e8f0;
+  transition: border-color 0.25s ease;
+}
+
+.dark * {
+  border-color: #1e293b;
+}
+
+a,
+button {
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 ::selection {
-  background: #bfdbfe;
-  color: #082f49;
+  background: #dedbfa;
+  color: #2e2868;
+}
+
+.dark ::selection {
+  background: #463a9e;
+  color: #eeedfe;
 }
 
 @layer components {
   .page-card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+    @apply rounded-3xl border border-slate-200 bg-white shadow-sm transition-colors duration-200 dark:border-slate-700/60 dark:bg-slate-900/60 dark:shadow-none;
   }
 
   .soft-chip {
-    @apply inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600;
+    @apply inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 transition-colors duration-200 dark:bg-slate-800 dark:text-slate-300;
   }
 
   .section-title {
-    @apply text-lg font-semibold text-slate-900;
+    @apply text-lg font-semibold text-slate-900 dark:text-slate-100;
   }
 
   .section-copy {
-    @apply text-sm leading-6 text-slate-500;
+    @apply text-sm leading-6 text-slate-500 dark:text-slate-400;
+  }
+
+  /* 统一输入框：大圆角 + 柔和聚焦 */
+  .input-round {
+    @apply rounded-3xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-primary-300 focus:ring-4 focus:ring-primary-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-primary-500 dark:focus:ring-primary-900/40;
+  }
+
+  /* 统一按钮：胶囊形 */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300 dark:bg-primary-500 dark:hover:bg-primary-400 dark:focus:ring-primary-800 dark:disabled:bg-primary-900;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/60 dark:focus:ring-slate-700;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-full border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 transition hover:border-primary-300 hover:bg-primary-100 focus:outline-none focus:ring-4 focus:ring-primary-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary-800 dark:bg-primary-900/40 dark:text-primary-300 dark:hover:bg-primary-900/60 dark:focus:ring-primary-900;
+  }
+
+  /* 圆形图标底 */
+  .icon-circle {
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 text-lg transition-colors duration-200 dark:bg-primary-900/60;
+  }
+
+  /* 入场动画：卡片依次淡入上浮 */
+  .fade-up {
+    animation: fade-up 0.5s ease-out both;
+  }
+
+  .fade-up-delay-1 {
+    animation-delay: 0.08s;
+  }
+
+  .fade-up-delay-2 {
+    animation-delay: 0.16s;
+  }
+
+  .fade-up-delay-3 {
+    animation-delay: 0.24s;
+  }
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }

@@ -40,6 +40,10 @@ function createSandboxModel() {
   return provider(process.env.AI_MODEL!);
 }
 
+export function createAiModel() {
+  return createSandboxModel();
+}
+
 function normalizeJsonText(value: string) {
   return value.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
 }

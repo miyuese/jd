@@ -128,7 +128,7 @@ export function MaterialEditor({
             <div className="text-sm text-slate-500">字数：{content.trim().length} · 最近手动保存：{formatDateTime(savedAt)}</div>
             <button
               type="submit"
-              className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200"
+              className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200"
             >
               {saveLabel}
             </button>

@@ -76,10 +76,10 @@ export function AiSandboxPanel({
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <span className="soft-chip">Quest 3.2 · AI 模型沙盒</span>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">最小 AI 调用链路验证</h1>
+            <span className="soft-chip">模型测试</span>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">AI 对话测试</h1>
             <p className="mt-3 text-sm leading-8 text-slate-600 sm:text-base">
-              这个页面只做一件事：输入一句测试问题，确认 OpenAI-compatible 模型接口能稳定返回文本结果。
+              输入一句问题，验证当前配置的 AI 模型能否正常返回结果，方便排查连接与响应问题。
             </p>
           </div>
 
@@ -96,10 +96,10 @@ export function AiSandboxPanel({
             <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-4">
               <div>
                 <h2 className="section-title">单轮测试输入</h2>
-                <p className="section-copy mt-2">当前只验证一次输入对应一次输出，不保存上下文，不做业务提示词。</p>
+                <p className="section-copy mt-2">一次输入对应一次输出，不保存上下文。</p>
               </div>
               <span className="rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs text-sky-700">
-                POST /api/ai-sandbox
+                AI 对话
               </span>
             </div>
 
@@ -135,7 +135,7 @@ export function AiSandboxPanel({
               <button
                 type="submit"
                 disabled={status === "loading" || !isConfigured}
-                className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-sky-300"
+                className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-300"
               >
                 {status === "loading" ? "正在调用模型..." : "发送测试问题"}
               </button>

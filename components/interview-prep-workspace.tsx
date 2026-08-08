@@ -162,7 +162,7 @@ export function InterviewPrepWorkspace({
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
-        <span className="soft-chip">阶段 10 · Quest 10.1-10.3</span>
+        <span className="soft-chip">面试准备</span>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">面试准备</h1>
         <div className="mt-6">
           <EmptyState
@@ -189,7 +189,7 @@ export function InterviewPrepWorkspace({
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <span className="soft-chip">阶段 10 · Quest 10.1-10.3</span>
+            <span className="soft-chip">面试表达</span>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">面试准备</h1>
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">基于已确认的项目事实和岗位匹配重点，生成适合口头表达的面试讲稿和高频追问清单。</p>
           </div>
@@ -213,7 +213,7 @@ export function InterviewPrepWorkspace({
           <select
             value={selectedProjectId ?? ""}
             onChange={(event) => handleProjectChange(event.target.value)}
-            className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
+            className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
           >
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -233,7 +233,7 @@ export function InterviewPrepWorkspace({
             {!projectCardExists ? (
               <Link
                 href={selectedProjectId ? `/project-card?projectId=${selectedProjectId}` : "/project-card"}
-                className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-sky-700"
+                className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700"
               >
                 前往项目卡片页
               </Link>
@@ -258,7 +258,7 @@ export function InterviewPrepWorkspace({
         <section className="page-card p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
             <div>
-              <span className="soft-chip">Quest 10.1</span>
+              <span className="soft-chip">开场讲稿</span>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">1 分钟项目介绍</h2>
               <p className="mt-2 text-sm leading-7 text-slate-600">适合开场介绍的口语化短讲稿，约 150-180 字。</p>
             </div>
@@ -300,7 +300,7 @@ export function InterviewPrepWorkspace({
         <section className="page-card p-6 sm:p-8">
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
             <div>
-              <span className="soft-chip">Quest 10.2</span>
+              <span className="soft-chip">展开讲述</span>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">3 分钟展开讲述</h2>
               <p className="mt-2 text-sm leading-7 text-slate-600">覆盖背景、动作、决策和结果的完整讲述稿，约 450-500 字。</p>
             </div>
@@ -343,7 +343,7 @@ export function InterviewPrepWorkspace({
       <section className="page-card p-6 sm:p-8">
         <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-5">
           <div>
-            <span className="soft-chip">Quest 10.3</span>
+            <span className="soft-chip">追问预测</span>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">高频追问清单</h2>
             <p className="mt-2 text-sm leading-7 text-slate-600">围绕当前项目和目标岗位，生成可能被面试官追问的问题。</p>
           </div>

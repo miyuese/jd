@@ -655,3 +655,343 @@ MVP 不引入复杂组织权限和协作权限体系。
 ## 二十五、一句话结论
 
 AI 面试复盘与 JD 定制求职助手不是一个单纯帮用户“写简历”的工具，而是一个帮助用户基于真实经历完成项目复盘、能力提炼、岗位匹配表达和面试准备的 AI 辅助工作流产品。它的关键价值在于：过程可信、表达可解释、结果可迭代，并能真实体现 AI 在求职场景中的澄清、提炼、转化和质量控制能力。
+
+---
+
+# 二十六、个人记忆系统技术方案（V1.1 新增）
+
+> 本文档为 PRD 新增章节，定义「个人记忆系统」的完整技术方案：目标、架构、技术栈、数据模型、处理流程、接口契约、AI 输出校验与实施里程碑。它是后续开发（原型 → 代码）的直接输入。
+
+## 26.1 方案概述与目标
+
+### 为什么做记忆系统
+
+现有产品是「单次项目闭环」：用户导入材料 → AI 生成输出 → 保存版本。每次生成都从零开始，用户的简历、项目材料、面试反馈、复盘笔记**散落在各业务表中，无法跨项目复用**，也无法形成「越用越懂用户」的能力。
+
+个人记忆系统的核心目标：
+
+1. **统一沉淀**：将用户一切输入（简历材料、项目材料、采访问答、面试反馈、复盘笔记）归一化为不可变的「事实证据层」。
+2. **能力画像**：从证据中抽象出三层能力标签（人物综合素质 / 通用能力 / 特定岗位能力），标签**必须链接证据**，可点击溯源。
+3. **按 JD 定制调用**：AI 写简历 / 准备面试时，只抽取与目标 JD 匹配的标签与证据，而不是全文塞入。
+4. **形成数据飞轮**：用越多 → 画像越准 → 输出越强 → 用户越离不开；面试反馈回流为「能力缺口」，驱动简历补强。
+
+### 一句话定义
+
+**个人记忆系统 = 事实证据库 + 能力标签库 + 证据↔标签链接 + 按 JD 动态调用的表达引擎。**
+
+## 26.2 总体架构（三层模型）
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  L3 表达调用层（按 JD 定制输出）                          │
+│  简历改写 / 面试准备 / 模拟面试官 / 竞争力雷达             │
+│  入参：目标 JD → 能力模型 → 匹配标签 → 召回证据 → 生成     │
+├─────────────────────────────────────────────────────────┤
+│  L2 能力标签层（可编辑、可确认）                          │
+│  AbilityTag：PERSONA / GENERAL / ROLE_SPECIFIC           │
+│  每条标签强链接 1..N 条证据（MemoryChunk）                │
+│  状态：DRAFT → CONFIRMED / REJECTED，confidence 打分      │
+├─────────────────────────────────────────────────────────┤
+│  L1 事实证据层（不可变资产）                              │
+│  MemorySource（统一入库）→ MemoryChunk（分块）→ embedding │
+│  来源：简历 / 项目材料 / 采访问答 / 面试反馈 / 复盘笔记     │
+└─────────────────────────────────────────────────────────┘
+```
+
+设计原则：
+
+- **L1 只增不改**：证据是不可变资产，用户修改通过「新版本证据」表达，不覆盖原文（与现有 VersionRecord 理念一致）。
+- **L2 可编辑可确认**：标签是模型抽象，允许用户驳回（REJECTED）或确认（CONFIRMED），防止 AI 标签化错误。
+- **L3 只读调用**：表达层不直接写证据，只读取「标签 + 证据引用」，保证输出可溯源。
+
+## 26.3 技术栈清单
+
+### 已有技术栈（复用，不新增）
+
+| 层 | 技术 | 职责 |
+|---|---|---|
+| 前端 | Next.js 14 App Router + TypeScript + Tailwind CSS | 页面与交互 |
+| 鉴权 | Clerk | 用户身份，clerkUserId 数据隔离 |
+| 数据库 | Neon Postgres + Prisma 6 | 持久化，所有业务表 |
+| AI | Vercel AI SDK + OpenAI-compatible 接口（AI_API_BASE_URL / AI_API_KEY / AI_MODEL） | LLM 生成与结构化输出 |
+| 文档解析 | pdfjs-dist / mammoth / tesseract.js | pdf / docx / 图片 OCR |
+| 校验 | zod | AI 输出 schema 校验 |
+
+### 本方案新增技术
+
+| 技术 | 阶段 | 用途 |
+|---|---|---|
+| `pgvector`（Neon 扩展） | V2 | 证据向量存储与语义相似度检索 |
+| Embeddings API（OpenAI-compatible `AI_EMBEDDING_MODEL`） | V2 | 将 MemoryChunk 转为向量（默认 1536 维，随所选模型调整） |
+| Prisma `postgresqlExtensions` previewFeature | V2 | 在 schema 中声明 vector 扩展 |
+
+> **MVP 阶段不引入 embedding**：单用户材料量级小（几十 KB），语义检索收益不显著，且「语义相似 ≠ 事实成立」（如材料"参与过推荐系统"被 AI 输出"主导了推荐系统"，embedding 判为相似但事实不同）。MVP 用「结构化引用 + FactStatus」实现 90% 溯源效果，零额外依赖；embedding 作为 V2 的可选增强。
+
+## 26.4 数据模型设计（Prisma Schema）
+
+新增模型与枚举（追加到 `prisma/schema.prisma`）：
+
+```prisma
+// ========== 个人记忆系统（V1.1） ==========
+
+enum MemorySourceType {
+  RESUME              // 简历材料
+  PROJECT_MATERIAL    // 项目材料
+  INTERVIEW_ANSWER    // AI 采访问答
+  INTERVIEW_FEEDBACK  // 面试反馈（模拟/真实）
+  REFLECTION          // 复盘笔记
+  MANUAL              // 手动录入
+}
+
+enum AbilityCategory {
+  PERSONA        // 人物综合素质（抗压、自驱、沟通……）
+  GENERAL        // 通用能力（数据分析、项目管理、产品思维……）
+  ROLE_SPECIFIC  // 特定岗位能力（如 AI PM：提示词工程、模型评估……）
+}
+
+enum TagStatus {
+  DRAFT      // AI 抽取待确认
+  CONFIRMED  // 用户确认
+  REJECTED   // 用户驳回
+}
+
+enum CitationKind {
+  DIRECT_QUOTE // 直接引用原文
+  PARAPHRASE   // 改写自原文
+  INFERENCE    // 推断，需标灰提示
+}
+
+// 记忆源：一切输入的归一化入口（不可变）
+model MemorySource {
+  id           String           @id @default(cuid())
+  clerkUserId  String
+  sourceType   MemorySourceType
+  title        String?
+  rawText      String           @db.Text
+  sourceRefId  String?          // 关联原业务记录 id（ProjectMaterial.id / QuestionAnswerRecord.id……）
+  projectId    String?          // 可选：所属项目
+  createdAt    DateTime         @default(now())
+  chunks       MemoryChunk[]
+  abilities    AbilityTag[]
+}
+
+// 证据单元：材料分块后的最小检索 / 引用单位
+model MemoryChunk {
+  id         String         @id @default(cuid())
+  sourceId   String
+  content    String         @db.Text
+  chunkIndex Int            @default(0)
+  createdAt  DateTime       @default(now())
+  source     MemorySource   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  abilities  AbilityTag[]
+}
+
+// 能力标签：三层分类，强链接证据
+model AbilityTag {
+  id          String         @id @default(cuid())
+  clerkUserId String
+  name        String         // 标签名，如「数据分析」
+  category    AbilityCategory
+  description String?        @db.Text // 一句话解释该标签对用户意味着什么
+  confidence  Float          @default(0.5) // AI 抽取置信度 0~1
+  status      TagStatus      @default(DRAFT)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  sources     MemorySource[]
+  chunks      MemoryChunk[]
+}
+
+// 输出引用：AI 输出的每一句 → 证据 chunk
+model OutputCitation {
+  id         String       @id @default(cuid())
+  clerkUserId String
+  versionId  String       // 关联 VersionRecord.id
+  sentenceId String       // 输出句子锚点 id（前端高亮定位）
+  chunkId    String
+  kind       CitationKind @default(PARAPHRASE)
+  createdAt  DateTime     @default(now())
+}
+```
+
+关键设计决策：
+
+1. **MemorySource 用 sourceRefId 指向原业务表**：不迁移旧数据，现有 ResumeMaterial / ProjectMaterial / QuestionAnswerRecord 保持不动，入库时写一份快照到 MemorySource（复制而非引用，保证 L1 不可变）。
+2. **证据↔标签是多对多**：一条证据可支撑多个标签，一个标签可引用多条证据——这是溯源能力的基础。
+3. **OutputCitation 独立成表**：不把引用塞进 VersionRecord.content（JSON 会膨胀），句子锚点由前端生成时分配，后端只存映射。
+4. **embedding 字段**：MVP 不建 `vector` 列；V2 时对 MemoryChunk 增加 `embedding Unsupported("vector(1536)")?` 并开启 Prisma `previewFeatures = ["postgresqlExtensions"]` + `extensions = [vector]`。
+
+## 26.5 核心处理流程
+
+### 流程 A：材料入库与分块
+
+```
+触发：用户导入简历/项目材料/复盘笔记，或 AI 采访完成一轮
+  ↓
+1. 复制原文快照到 MemorySource（sourceRefId 记录来源）
+2. 按段落/语义边界分块 → MemoryChunk（每块 ≤ 500 字，保留 chunkIndex）
+3. 返回 chunks 列表，供后续打标与召回
+```
+
+### 流程 B：能力标签抽取（AI 结构化输出）
+
+```
+触发：MemorySource 入库成功后（异步）
+  ↓
+1. 将全部 chunks 拼接 + 目标岗位提示词 → LLM
+2. LLM 输出 JSON：{ abilities: [{ name, category, confidence, evidenceChunkIds, description }] }
+3. zod 校验（见 26.7）→ 失败则重试 1 次，再失败则降级为 DRAFT 空集
+4. 写入 AbilityTag（status=DRAFT），建立 tag↔chunk 链接
+5. 前端能力画像页展示，用户可确认 / 驳回
+```
+
+### 流程 C：按 JD 动态调用（写简历 / 面试准备）
+
+```
+触发：用户进入简历改写 / 面试准备，选定目标 JD
+  ↓
+1. 解析 JD → 能力模型（复用现有 MatchAnalysis 的 JD 能力提炼）
+2. 按能力模型从 AbilityTag 中召回匹配标签（优先 CONFIRMED）
+3. 按标签召回证据 chunks（限制条数，如每标签 3 条，控制 token）
+4. 组装 Prompt：JD 能力模型 + 匹配标签 + 证据原文 + 用户需求
+5. LLM 生成输出 → 每句标注引用（sentenceId ↔ chunkId）→ 落 OutputCitation
+6. 前端渲染：鼠标悬停高亮句 → 弹出证据原文
+```
+
+### 流程 D：面试反馈回流（数据飞轮闭环）
+
+```
+触发：模拟面试结束 / 用户录入真实面试反馈
+  ↓
+1. 反馈文本入库 MemorySource（type=INTERVIEW_FEEDBACK）
+2. AI 抽取「被追问卡住的问题」→ 生成能力缺口标签（confidence 低，标 GAP）
+3. 关联到对应 AbilityTag：若存在同能力标签 → 标记「需补强」；若不存在 → 新建 REJECTED 倾向的缺口标签
+4. 下次简历改写 / 面试准备时，缺口标签自动进入「补强建议」区块
+```
+
+### 流程 E：溯源渲染
+
+```
+AI 输出（前端）→ 每句包 <span data-citation="sentenceId">
+  → 后端返回 citations: [{ sentenceId, chunkId, kind, content }]
+  → 悬停 / 点击：高亮句 + 弹出证据原文 + 引用类型徽标
+    DIRECT_QUOTE（绿：直接引用） / PARAPHRASE（蓝：改写） / INFERENCE（灰：推断，需确认）
+  → INFERENCE 句默认带「待确认」标记，与现有 FactStatus 语义一致
+```
+
+## 26.6 接口设计（API Routes）
+
+| 方法 & 路径 | 用途 | 核心入参 | 核心出参 |
+|---|---|---|---|
+| `POST /api/memory/sources` | 材料入库（流程 A） | `{ sourceType, title, rawText, sourceRefId?, projectId? }` | `{ sourceId, chunks: [{id, content}] }` |
+| `POST /api/memory/sources/:id/extract` | 触发标签抽取（流程 B，可手动重跑） | — | `{ jobId }`（异步） |
+| `GET /api/memory/abilities?category=&status=` | 能力画像页列表 | 过滤条件 | `[{ id, name, category, confidence, status, evidenceCount }]` |
+| `PATCH /api/memory/abilities/:id` | 用户确认 / 驳回标签 | `{ status, description? }` | 更新后的标签 |
+| `GET /api/memory/abilities/:id/evidence` | 标签溯源（点击看证据） | — | `[{ chunkId, content, sourceTitle, sourceType }]` |
+| `POST /api/memory/call` | 按 JD 调用生成（流程 C） | `{ jdId, outputType, prompt }` | `{ text, citations }` |
+| `POST /api/memory/feedback` | 面试反馈回流（流程 D） | `{ feedbackText, projectId? }` | `{ gapTags }` |
+| `DELETE /api/memory/sources/:id` | 删除记忆源（级联删 chunks / citations） | — | 204 |
+
+> 所有接口走现有鉴权（Clerk），强制 `clerkUserId` 归属校验；AI 相关接口统一走 Vercel AI SDK 封装（复用 `lib/ai-config.ts`）。
+
+## 26.7 AI 输出契约（结构化输出 + zod 校验）
+
+### 标签抽取输出（流程 B）
+
+```json
+{
+  "abilities": [
+    {
+      "name": "数据分析",
+      "category": "GENERAL",
+      "confidence": 0.92,
+      "description": "使用 SQL 处理 10 万级用户行为数据并输出洞察",
+      "evidenceChunkIds": ["chunk_xxx", "chunk_yyy"]
+    }
+  ]
+}
+```
+
+zod schema：
+
+```ts
+const abilitySchema = z.object({
+  name: z.string().min(1).max(50),
+  category: z.enum(["PERSONA", "GENERAL", "ROLE_SPECIFIC"]),
+  confidence: z.number().min(0).max(1),
+  description: z.string().optional(),
+  evidenceChunkIds: z.array(z.string()).max(10)
+});
+const extractOutputSchema = z.object({
+  abilities: z.array(abilitySchema).max(50)
+});
+```
+
+校验失败策略：`JSON.parse` 失败 → 重试 1 次（提示模型严格输出 JSON）；仍失败 → 返回空集 + 前端提示"标签抽取失败，可稍后重试"；不阻塞主流程。
+
+### 按 JD 调用输出（流程 C）
+
+```json
+{
+  "text": "独立设计并落地冷启动召回策略，……",
+  "citations": [
+    { "sentenceId": "s1", "chunkId": "chunk_xxx", "kind": "PARAPHRASE" }
+  ]
+}
+```
+
+规则：
+
+- **引用缺失的句子不允许出现事实性描述**：若 LLM 写了无法对应证据的内容，强制标记 `kind: "INFERENCE"` 并前端标灰。
+- Prompt 中显式声明："你只能基于给定证据改写，不得新增用户未提供的职责、数据或成果。"
+
+## 26.8 与现有模块的集成映射
+
+| 现有模块 | 记忆系统接入点 |
+|---|---|
+| 材料导入（简历/项目材料） | 入库时同步写 MemorySource（RESUME / PROJECT_MATERIAL） |
+| AI 采访（QuestionAnswerRecord） | 每轮回答同步写 MemorySource（INTERVIEW_ANSWER） |
+| 结构化项目卡片 | 确认后的事实自动成为高置信证据，优先打 ROLE_SPECIFIC 标签 |
+| JD 分析与匹配分析 | JD 能力模型作为流程 C 的召回条件（能力模型 → 标签匹配） |
+| 简历改写（VersionRecord OUTPUT） | 改写时从记忆库召回标签+证据，输出写 OutputCitation |
+| 面试准备 | 生成表达同样走流程 C；模拟面试反馈走流程 D |
+| 历史版本 | OutputCitation 挂在 VersionRecord 下，恢复版本时引用随行 |
+
+## 26.9 实施里程碑
+
+### M1：证据底座（无 AI 标签）
+- MemorySource / MemoryChunk 建表与入库接口
+- 材料导入 + 采访回答自动入库、分块
+- 后端 `POST /api/memory/sources` + 前端「记忆库」查看页（纯文本列表）
+
+### M2：标签与画像
+- 标签抽取流程（B）+ zod 校验 + 用户确认/驳回
+- 能力画像页（三层分类展示、证据列表、置信度）
+- 溯源渲染（流程 E）在前端基础落地（悬停高亮）
+
+### M3：按 JD 调用 + 飞轮
+- 流程 C 接入简历改写模块（改写时自动召回）
+- 流程 D 面试反馈回流，简历补强建议
+- 竞争力雷达图（可选项，基于标签分类聚合）
+
+### M4（可选）：embedding 语义检索
+- Neon 开启 pgvector，MemoryChunk 增加向量列
+- 标签召回升级为「语义召回 + 关键词召回融合」
+- 评估点：召回质量提升是否值得 embedding 成本
+
+## 26.10 风险与降级策略
+
+| 风险 | 降级策略 |
+|---|---|
+| AI 标签抽取质量差 | confidence 打分 + DRAFT 状态 + 用户确认/驳回；质量评估用「用户驳回率」指标 |
+| LLM 输出不符合 JSON schema | zod 校验 + 重试 1 次 + 降级为空集并提示，不阻塞主流程 |
+| 输出虚构/夸大 | 流程 C 强制证据约束 + INFERENCE 标灰 + FactStatus 兜底 |
+| 记忆库膨胀 | 分块限长、召回限条数（token 控制）；V2 用 embedding 做 Top-K 精排 |
+| 隐私顾虑 | 数据归用户所有，支持单条/整库删除（级联），PRD 明示数据用途 |
+| embedding 成本 | M4 仅对高价值材料（项目卡片、确认事实）建向量，不做全量 |
+
+## 26.11 成功指标（记忆系统专项）
+
+- 材料自动入库率：用户导入的材料中进入记忆库的比例（目标 ≥ 95%）
+- 标签确认率：用户确认 + 驳回的标签 / 全部 DRAFT 标签（衡量抽取质量）
+- 改写引用覆盖率：简历改写输出中带有效证据引用的句子占比（目标 ≥ 80%）
+- 飞轮效果：用户使用 2 个项目后，第三个项目改写时的平均证据召回条数 / 生成耗时变化

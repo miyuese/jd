@@ -1,7 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const PDF_TYPE = "application/pdf";
@@ -120,7 +119,16 @@ async function ocrPdfPages(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
-  const { userId } = auth();
+  // 开发模式（未配置 Clerk）：以开发用户身份放行；配置了 Clerk 则校验登录
+  const { hasClerkCredentials } = await import("@/lib/clerk-env");
+  let userId: string | null = null;
+
+  if (hasClerkCredentials) {
+    const { auth: clerkAuth } = await import("@clerk/nextjs/server");
+    userId = clerkAuth().userId ?? null;
+  } else {
+    userId = "dev-user";
+  }
 
   if (!userId) {
     return NextResponse.json({ error: "未登录，无法上传文件。" }, { status: 401 });

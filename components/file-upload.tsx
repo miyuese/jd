@@ -78,7 +78,7 @@ export function FileUpload({ onTextExtracted }: FileUploadProps) {
     <div className="rounded-[20px] border border-dashed border-sky-200 bg-sky-50/50 p-4">
       <div className="flex items-center gap-3">
         <label
-          className={`inline-flex cursor-pointer items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 ${isUploading ? "pointer-events-none opacity-60" : ""}`}
+          className={`inline-flex cursor-pointer items-center justify-center rounded-full bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700 ${isUploading ? "pointer-events-none opacity-60" : ""}`}
         >
           {isUploading ? "正在解析..." : "上传文件"}
           <input

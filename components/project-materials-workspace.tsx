@@ -40,7 +40,7 @@ type MaterialFormValues = {
 
 function formatDateTime(value: string | null) {
   if (!value) {
-    return "尚未保存到数据库";
+    return "尚未保存";
   }
 
   return new Intl.DateTimeFormat("zh-CN", {
@@ -76,7 +76,7 @@ export function ProjectMaterialsWorkspace({
   const [answerValues, setAnswerValues] = useState<Record<string, string>>({});
   const [timelineMessage, setTimelineMessage] = useState(
     initialTimeline.length > 0
-      ? "下方是已保存到数据库的复盘时间线。"
+      ? "下方是你的复盘时间线。"
       : "还没有已保存的问答记录。先回答一条 AI 问题，时间线就会出现。"
   );
   const [timelineError, setTimelineError] = useState("");
@@ -105,7 +105,7 @@ export function ProjectMaterialsWorkspace({
     setQuestionMessage("还没有生成采访问题。先保存项目材料，再点击“开始复盘”。");
     setTimelineMessage(
       initialTimeline.length > 0
-        ? "下方是已保存到数据库的复盘时间线。"
+        ? "下方是你的复盘时间线。"
         : "还没有已保存的问答记录。先回答一条 AI 问题，时间线就会出现。"
     );
   }, [form, initialMaterialContent, initialTimeline, materialSavedAt, selectedProjectId]);
@@ -191,23 +191,23 @@ export function ProjectMaterialsWorkspace({
 
   const handleFileTextExtracted = (text: string, fileName: string) => {
     form.setValue("content", text);
-    setMaterialMessage(`已从文件「${fileName}」提取文字内容，可以继续编辑后保存到数据库。`);
+    setMaterialMessage(`已从文件「${fileName}」提取文字内容，可以继续编辑后保存。`);
   };
 
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
-        <span className="soft-chip">阶段 6 · Quest 6.2-6.4</span>
+        <span className="soft-chip">项目复盘</span>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">项目原始材料与 AI 复盘</h1>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-          当前账号还没有项目，暂时无法保存项目材料或发起 AI 采访式复盘。
+          当前还没有项目，暂时无法保存项目材料或发起 AI 采访式复盘。
         </p>
         <div className="mt-6 rounded-[24px] border border-dashed border-sky-200 bg-sky-50/65 p-6 text-sm leading-7 text-slate-600">
           先去工作台创建至少一个项目，随后再回到这里录入项目材料、生成首轮问题并保存问答时间线。
         </div>
         <Link
           href="/workspace"
-          className="mt-6 inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-sky-700"
+          className="mt-6 inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700"
         >
           前往工作台创建项目
         </Link>
@@ -221,10 +221,10 @@ export function ProjectMaterialsWorkspace({
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <span className="soft-chip">阶段 6 · Quest 6.2-6.4 · 阶段 11 · Quest 11.4-11.5</span>
+            <span className="soft-chip">项目复盘</span>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">项目原始材料与 AI 复盘</h1>
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
-              先把某个项目的草稿、笔记和碎片化事实保存到数据库，再基于目标岗位发起首轮采访式问题，并把一问一答沉淀成可回看的复盘时间线。
+              保存项目的草稿、笔记和碎片化事实，再基于目标岗位发起首轮采访式问题，把一问一答沉淀成可回看的复盘时间线。
             </p>
           </div>
 
@@ -245,7 +245,7 @@ export function ProjectMaterialsWorkspace({
           <select
             value={selectedProjectId ?? ""}
             onChange={(event) => handleProjectChange(event.target.value)}
-            className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
+            className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
           >
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -288,7 +288,7 @@ export function ProjectMaterialsWorkspace({
             <button
               type="submit"
               disabled={isSavingMaterial || !selectedProjectId}
-              className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300"
+              className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
             >
               {isSavingMaterial ? "正在保存项目材料..." : "保存项目材料"}
             </button>
@@ -326,7 +326,7 @@ export function ProjectMaterialsWorkspace({
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 border-b border-sky-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <span className="soft-chip">Quest 6.3 · 首轮采访问题</span>
+            <span className="soft-chip">AI 采访式复盘</span>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">开始复盘</h2>
             <p className="mt-2 text-sm leading-7 text-slate-600">AI 会根据当前项目的目标岗位和原始材料，生成 3 到 5 条采访式问题。</p>
           </div>
@@ -359,7 +359,7 @@ export function ProjectMaterialsWorkspace({
                   value={answerValues[question] ?? ""}
                   onChange={(event) => handleAnswerChange(question, event.target.value)}
                   placeholder="用你自己的真实经历来回答这条问题。回答保存后，下方会出现一问一答时间线。"
-                  className="mt-4 w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                  className="mt-4 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
                 />
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <span className="text-xs text-slate-500">建议优先回答可量化结果、关键动作和判断依据。</span>
@@ -381,9 +381,9 @@ export function ProjectMaterialsWorkspace({
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 border-b border-sky-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <span className="soft-chip">Quest 6.4 · 复盘时间线</span>
+            <span className="soft-chip">复盘记录</span>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">已保存问答</h2>
-            <p className="mt-2 text-sm leading-7 text-slate-600">这里只展示已落库的一问一答记录，刷新页面后仍应存在。</p>
+            <p className="mt-2 text-sm leading-7 text-slate-600">这里展示你保存过的一问一答记录，刷新页面后仍会保留。</p>
           </div>
         </div>
 

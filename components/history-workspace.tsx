@@ -150,7 +150,7 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
-        <span className="soft-chip">阶段 11 · Quest 11.1-11.3</span>
+        <span className="soft-chip">历史版本</span>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">历史版本</h1>
         <div className="mt-6">
           <EmptyState
@@ -177,7 +177,7 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <span className="soft-chip">阶段 11 · Quest 11.1-11.3</span>
+            <span className="soft-chip">版本时间线</span>
             <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">历史版本</h1>
             <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
               项目卡片版本、匹配分析版本和输出版本的统一时间线。可以查看历史快照，也可以恢复到当前编辑区继续使用。
@@ -202,7 +202,7 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
           <select
             value={selectedProjectId ?? ""}
             onChange={(event) => handleProjectChange(event.target.value)}
-            className="w-full rounded-2xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
+            className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm"
           >
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -274,7 +274,7 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
                             handleRestore(version);
                           }}
                           disabled={isRestoring}
-                          className="inline-flex items-center justify-center rounded-full bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-sky-300"
+                          className="inline-flex items-center justify-center rounded-full bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-300"
                         >
                           恢复此版本
                         </button>
@@ -363,7 +363,7 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
                 type="button"
                 onClick={() => handleRestore(selectedVersion)}
                 disabled={isRestoring}
-                className="w-full inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300"
+                className="w-full inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
               >
                 {isRestoring ? "正在恢复..." : "恢复此版本到当前编辑区"}
               </button>

@@ -34,7 +34,7 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
   const [submitMessage, setSubmitMessage] = useState(
     initialContent
       ? "当前数据库中已存在一份简历内容，可以继续编辑后覆盖保存。"
-      : "当前还没有数据库简历记录。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
+      : "当前还没有保存过简历。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
   );
   const [submitError, setSubmitError] = useState("");
   const [latestSavedAt, setLatestSavedAt] = useState<string | null>(savedAt);
@@ -52,7 +52,7 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
     setSubmitMessage(
       initialContent
         ? "当前数据库中已存在一份简历内容，可以继续编辑后覆盖保存。"
-        : "当前还没有数据库简历记录。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
+        : "当前还没有保存过简历。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
     );
   }, [form, initialContent, savedAt]);
 
@@ -83,10 +83,10 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
       <section className="page-card relative overflow-hidden p-6 sm:p-8">
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-sky-100/90 via-transparent to-cyan-100/70" />
         <div className="relative">
-          <span className="soft-chip">阶段 6 · Quest 6.1 · 阶段 11 · Quest 11.4-11.5</span>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">保存已有简历内容</h1>
+          <span className="soft-chip">简历库</span>
+          <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">你的简历</h1>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-            把你当前正在使用的简历正文保存到数据库，作为后续 JD 定制改写前的原始上下文。支持手动粘贴或上传 .docx / .pdf 文件自动提取文字。
+            保存当前简历正文，作为后续 JD 定制改写的原始上下文。支持手动粘贴，或上传 .docx / .pdf 文件自动提取文字。
           </p>
         </div>
       </section>
@@ -95,11 +95,11 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
         <form className="page-card p-6 sm:p-8" onSubmit={form.handleSubmit(handleSave)}>
           <div className="flex items-center justify-between gap-3 border-b border-sky-100 pb-4">
             <div>
-              <h2 className="section-title">简历正文输入区</h2>
-              <p className="section-copy mt-2">保存后会真实落库，刷新页面仍会回填同一段文本。</p>
+              <h2 className="section-title">简历内容</h2>
+              <p className="section-copy mt-2">保存后随时可回读，刷新页面仍会保留最新版本。</p>
             </div>
             <span className="rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs text-sky-700">
-              Neon 数据库
+              自动保存
             </span>
           </div>
 
@@ -118,25 +118,25 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
 
           <div className="mt-4 flex flex-col gap-3 border-t border-sky-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-slate-500">
-              字数：{content.trim().length} · 最近数据库保存：{formatDateTime(latestSavedAt)}
+              字数：{content.trim().length} · 最近保存：{formatDateTime(latestSavedAt)}
             </div>
             <button
               type="submit"
               disabled={isPending}
-              className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(2,132,199,0.85)] transition hover:bg-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-200 disabled:cursor-not-allowed disabled:bg-sky-300"
+              className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
             >
-              {isPending ? "正在保存简历内容..." : "保存到数据库"}
+              {isPending ? "正在保存..." : "保存简历"}
             </button>
           </div>
         </form>
 
         <div className="space-y-4">
           <div className="page-card p-5">
-            <h3 className="text-lg font-semibold text-slate-900">当前阶段会产出什么</h3>
+            <h3 className="text-lg font-semibold text-slate-900">这份简历的用途</h3>
             <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">为当前账号保存一份可回读的已有简历文本记录。</div>
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">后续简历改写会以这里的原始内容作为上下文输入。</div>
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">支持上传 .docx 或 .pdf 文件自动提取文字。</div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">作为 JD 定制改写前的原始上下文。</div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">同步沉淀进个人记忆库，参与能力画像。</div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">支持上传 .docx 或 .pdf 自动提取文字。</div>
             </div>
           </div>
 
@@ -146,7 +146,7 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
             <div className="mt-4 rounded-2xl bg-sky-50/70 p-4 text-sm leading-7 text-slate-700">
               {content.trim()
                 ? content
-                : "还没有录入简历正文。先把当前版本原文贴进来，保存后刷新页面应该仍能看到。"}
+                : "还没有录入简历内容。把当前简历原文贴进来，保存后这里会显示。"}
             </div>
           </div>
         </div>
