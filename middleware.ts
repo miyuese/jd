@@ -10,7 +10,8 @@ const isProtectedRoute = createRouteMatcher([
   "/jd-analysis(.*)",
   "/resume-rewrite(.*)",
   "/interview-prep(.*)",
-  "/history(.*)"
+  "/history(.*)",
+  "/settings(.*)"
 ]);
 
 const hasClerkCredentials = Boolean(

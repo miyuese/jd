@@ -52,5 +52,11 @@ export const navItems = [
     label: "历史版本",
     icon: "📚",
     description: "版本管理与恢复"
+  },
+  {
+    href: "/settings",
+    label: "模型设置",
+    icon: "⚙️",
+    description: "AI 模型配置切换"
   }
 ] as const;

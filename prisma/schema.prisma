@@ -233,3 +233,20 @@ model JdMemoryTagChunk {
 
   @@id([tagId, chunkId])
 }
+
+// ========== AI 模型配置（V1.2，可在设置页动态切换） ==========
+
+model JdAiProviderConfig {
+  id             String   @id @default(cuid())
+  ownerUserId    String   // 配置所有者：只有 owner 可以编辑
+  providerName   String   @default("openai-compatible")
+  baseURL        String
+  apiKey         String
+  primaryModel   String
+  fallbackModels Json?    // ["model-b", "model-c"] 备用模型列表
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([ownerUserId])
+}
