@@ -80,7 +80,6 @@ export function ResumeRewriteWorkspace({
   const [saveError, setSaveError] = useState("");
   const [responseModel, setResponseModel] = useState("");
   const [latestSavedAt, setLatestSavedAt] = useState<string | null>(resumeSavedAt);
-  const [printContent, setPrintContent] = useState("");
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const resumeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -229,22 +228,6 @@ export function ResumeRewriteWorkspace({
       setLatestSavedAt(result.savedAt ?? new Date().toISOString());
       router.refresh();
     });
-  };
-
-  const handleExportPdf = () => {
-    const text = resumeContext.trim();
-
-    if (!text) {
-      setSaveError("当前简历上下文为空，无法导出。请先生成改写稿并应用到编辑区。");
-      return;
-    }
-
-    setSaveError("");
-    setPrintContent(text);
-    // 等待 React 渲染打印容器后再触发浏览器打印
-    setTimeout(() => {
-      window.print();
-    }, 150);
   };
 
   if (projects.length === 0) {
@@ -474,9 +457,6 @@ export function ResumeRewriteWorkspace({
             <button type="button" onClick={handleApplyRewrite} disabled={applyMode === "fragment-rewrite" ? !fragmentRewriteDraft.trim() : !rewriteDraft.trim()} className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-white px-5 py-3 text-sm font-medium text-sky-700 transition hover:border-sky-300 disabled:cursor-not-allowed disabled:text-slate-400">
               应用改写到编辑区
             </button>
-            <button type="button" onClick={handleExportPdf} disabled={!resumeContext.trim()} className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-medium text-sky-700 transition hover:bg-sky-100 focus:outline-none focus:ring-4 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-50">
-              导出 PDF
-            </button>
             <button type="button" onClick={handleSaveContext} disabled={isSavingContext} className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300">
               {isSavingContext ? "正在保存简历上下文..." : "保存当前简历上下文"}
             </button>
@@ -488,18 +468,6 @@ export function ResumeRewriteWorkspace({
           </div>
         </section>
       </section>
-
-      {/* 导出 PDF 专用打印容器（屏幕隐藏，打印时独占一页） */}
-      {printContent ? (
-        <div className="print-area">
-          <div className="resume-page">
-            <h1>个人简历</h1>
-            <div className="resume-rule" />
-            <div className="resume-body">{printContent}</div>
-            <div className="resume-footer">由 AI 面试复盘与 JD 定制求职助手导出 · 目标岗位：{selectedProject?.targetRole ?? ""}</div>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }

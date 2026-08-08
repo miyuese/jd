@@ -49,7 +49,7 @@
 app/
   workspace/            工作台
   memory/               记忆库与能力画像
-  resume-materials/     简历材料（支持导出 PDF）
+  resume-materials/     简历材料
   project-materials/    项目材料
   project-card/         项目卡片与事实确认
   jd-analysis/          JD 解析与匹配分析
