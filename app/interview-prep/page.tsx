@@ -5,6 +5,7 @@ import { listWorkspaceProjects } from "@/lib/neon-db";
 import { getLatestProjectCard } from "@/lib/stage7-data";
 import { getLatestMatchAnalysis } from "@/lib/stage8-data";
 import { listInterviewOutputVersions } from "@/lib/stage10-data";
+import { listAbilityGaps } from "@/lib/memory-data";
 
 export const metadata: Metadata = {
   title: "面试准备"
@@ -41,7 +42,11 @@ export default async function InterviewPrepPage({
   searchParams?: { projectId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
-  const projects = await listWorkspaceProjects(userId);
+  const [projects, abilityGaps] = await Promise.all([listWorkspaceProjects(userId), listAbilityGaps(userId)]);
+  const serializedGaps = abilityGaps.map((gap) => ({
+    ...gap,
+    updatedAt: gap.updatedAt instanceof Date ? gap.updatedAt.toISOString() : String(gap.updatedAt)
+  }));
   const requestedProjectId = Array.isArray(searchParams?.projectId) ? searchParams?.projectId[0] : searchParams?.projectId;
   const selectedProjectId = projects.some((project) => project.id === requestedProjectId)
     ? requestedProjectId ?? null
@@ -59,6 +64,7 @@ export default async function InterviewPrepPage({
           threeMinuteStory: null,
           questions: null
         }}
+        initialAbilityGaps={serializedGaps}
       />
     );
   }
@@ -81,6 +87,7 @@ export default async function InterviewPrepPage({
       projectCardExists={Boolean(projectCard)}
       matchAnalysisExists={Boolean(matchAnalysis)}
       latestOutput={latestOutput}
+      initialAbilityGaps={serializedGaps}
     />
   );
 }

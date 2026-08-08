@@ -3,6 +3,7 @@ import { ResumeRewriteWorkspace } from "@/components/resume-rewrite-workspace";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { listWorkspaceProjects } from "@/lib/neon-db";
 import { getResumeRewriteInputs } from "@/lib/stage9-data";
+import { listAbilityGaps } from "@/lib/memory-data";
 
 export const metadata: Metadata = {
   title: "简历改写"
@@ -14,7 +15,11 @@ export default async function ResumeRewritePage({
   searchParams?: { projectId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
-  const projects = await listWorkspaceProjects(userId);
+  const [projects, abilityGaps] = await Promise.all([listWorkspaceProjects(userId), listAbilityGaps(userId)]);
+  const serializedGaps = abilityGaps.map((gap) => ({
+    ...gap,
+    updatedAt: gap.updatedAt instanceof Date ? gap.updatedAt.toISOString() : String(gap.updatedAt)
+  }));
   const requestedProjectId = Array.isArray(searchParams?.projectId) ? searchParams?.projectId[0] : searchParams?.projectId;
   const selectedProjectId = projects.some((project) => project.id === requestedProjectId)
     ? requestedProjectId ?? null
@@ -29,6 +34,7 @@ export default async function ResumeRewritePage({
         resumeSavedAt={null}
         projectCardExists={false}
         matchAnalysisExists={false}
+        initialAbilityGaps={serializedGaps}
       />
     );
   }
@@ -48,6 +54,7 @@ export default async function ResumeRewritePage({
       resumeSavedAt={resumeMaterial?.updatedAt.toISOString() ?? null}
       projectCardExists={Boolean(projectCard)}
       matchAnalysisExists={Boolean(matchAnalysis)}
+      initialAbilityGaps={serializedGaps}
     />
   );
 }

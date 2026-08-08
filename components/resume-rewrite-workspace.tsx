@@ -25,6 +25,22 @@ type ResumeRewriteWorkspaceProps = {
   resumeSavedAt: string | null;
   projectCardExists: boolean;
   matchAnalysisExists: boolean;
+  initialAbilityGaps: AbilityGapItem[];
+};
+
+type AbilityGapItem = {
+  tagId: string;
+  name: string;
+  description: string | null;
+  confidence: number;
+  status: string;
+  updatedAt: string;
+  evidence: Array<{
+    chunkId: string;
+    content: string;
+    sourceTitle: string | null;
+    sourceType: string | null;
+  }>;
 };
 
 type RewriteMode = "balanced" | "result-focused" | "responsibility-focused" | "jd-focused";
@@ -55,7 +71,8 @@ export function ResumeRewriteWorkspace({
   initialResumeText,
   resumeSavedAt,
   projectCardExists,
-  matchAnalysisExists
+  matchAnalysisExists,
+  initialAbilityGaps
 }: ResumeRewriteWorkspaceProps) {
   const router = useRouter();
   const [isGenerating, startGenerating] = useTransition();
@@ -291,6 +308,45 @@ export function ResumeRewriteWorkspace({
           </select>
         </div>
       </section>
+
+      {initialAbilityGaps.length > 0 ? (
+        <section className="page-card p-6 sm:p-8">
+          <div className="flex items-center justify-between gap-3 border-b border-amber-100 pb-4">
+            <div>
+              <h2 className="section-title">能力缺口补强建议</h2>
+              <p className="section-copy mt-2">来自面试反馈回流：这些能力缺口会自动纳入本次改写的记忆召回，改写时注意补强对应证据。</p>
+            </div>
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-700">
+              {initialAbilityGaps.length} 个缺口
+            </span>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {initialAbilityGaps.map((gap) => (
+              <div key={gap.tagId} className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                    {gap.name}
+                  </span>
+                  <span className="text-xs text-slate-400">{gap.evidence.length} 条证据</span>
+                </div>
+                {gap.description ? <p className="mt-3 text-sm leading-6 text-slate-600">{gap.description}</p> : null}
+                {gap.evidence.length > 0 ? (
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs font-medium text-amber-600">查看来自面试反馈的证据</summary>
+                    <div className="mt-2 space-y-2">
+                      {gap.evidence.map((evidence) => (
+                        <div key={evidence.chunkId} className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-500">
+                          {evidence.content}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {!projectCardExists || !matchAnalysisExists ? (
         <section className="page-card p-6 sm:p-8">

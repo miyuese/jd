@@ -329,6 +329,15 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
               />
             </div>
 
+            <div className="rounded-2xl border border-amber-100 bg-amber-50/60 p-4 text-sm leading-7 text-slate-600">
+              <div className="font-medium text-amber-800">复盘引导：写清楚这三点，缺口识别更准</div>
+              <ul className="mt-2 space-y-1.5">
+                <li>1. 被追问卡住的问题是什么？</li>
+                <li>2. 你当时怎么答的？卡在哪一步？</li>
+                <li>3. 面试官追问了哪个细节你答不上来？</li>
+              </ul>
+            </div>
+
             <button
               type="button"
               onClick={handleFeedback}

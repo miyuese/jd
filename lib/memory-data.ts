@@ -452,3 +452,83 @@ export async function listChunksByTag(tagId: string) {
 
   return rows;
 }
+
+// ========== 能力缺口（面试反馈回流，闭环最后环节） ==========
+
+export type AbilityGapItem = {
+  tagId: string;
+  name: string;
+  description: string | null;
+  confidence: number;
+  status: TagStatus;
+  updatedAt: string | Date;
+  evidence: Array<{
+    chunkId: string;
+    content: string;
+    sourceTitle: string | null;
+    sourceType: MemorySourceType | null;
+  }>;
+};
+
+/**
+ * 查询当前用户的全部能力缺口标签（「缺口：」前缀，来自面试反馈回流）。
+ * 这些标签会进入简历改写 / 面试准备的「补强建议」区块，形成数据飞轮闭环。
+ */
+export async function listAbilityGaps(clerkUserId: string): Promise<AbilityGapItem[]> {
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT t."id" AS "tagId", t."name", t."description", t."confidence", t."status", t."updatedAt",
+             c."id" AS "chunkId", c."content",
+             s."title" AS "sourceTitle", s."sourceType"
+      FROM "JdAbilityTag" t
+      LEFT JOIN "JdMemoryTagChunk" tc ON tc."tagId" = t."id"
+      LEFT JOIN "JdMemoryChunk" c ON c."id" = tc."chunkId"
+      LEFT JOIN "JdMemorySource" s ON s."id" = c."sourceId"
+      WHERE t."clerkUserId" = $1 AND t."name" LIKE '缺口：%'
+      ORDER BY t."updatedAt" DESC, c."chunkIndex" ASC
+    `,
+    [clerkUserId]
+  )) as Array<{
+    tagId: string;
+    name: string;
+    description: string | null;
+    confidence: number;
+    status: TagStatus;
+    updatedAt: string | Date;
+    chunkId: string | null;
+    content: string | null;
+    sourceTitle: string | null;
+    sourceType: MemorySourceType | null;
+  }>;
+
+  const grouped = new Map<string, AbilityGapItem>();
+
+  for (const row of rows) {
+    let item = grouped.get(row.tagId);
+
+    if (!item) {
+      item = {
+        tagId: row.tagId,
+        name: row.name,
+        description: row.description,
+        confidence: row.confidence,
+        status: row.status,
+        updatedAt: row.updatedAt,
+        evidence: []
+      };
+      grouped.set(row.tagId, item);
+    }
+
+    if (row.chunkId && row.content) {
+      item.evidence.push({
+        chunkId: row.chunkId,
+        content: row.content,
+        sourceTitle: row.sourceTitle,
+        sourceType: row.sourceType
+      });
+    }
+  }
+
+  return Array.from(grouped.values());
+}
