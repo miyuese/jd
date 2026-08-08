@@ -38,7 +38,6 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
   );
   const [submitError, setSubmitError] = useState("");
   const [latestSavedAt, setLatestSavedAt] = useState<string | null>(savedAt);
-  const [printContent, setPrintContent] = useState("");
   const form = useForm<ResumeMaterialFormValues>({
     defaultValues: {
       content: initialContent
@@ -56,22 +55,6 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
         : "当前还没有保存过简历。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
     );
   }, [form, initialContent, savedAt]);
-
-  const handleExportPdf = () => {
-    const text = content.trim();
-
-    if (!text) {
-      setSubmitError("简历内容为空，无法导出。请先粘贴或上传简历内容。");
-      return;
-    }
-
-    setSubmitError("");
-    setPrintContent(text);
-    // 等待 React 渲染打印容器后再触发浏览器打印
-    setTimeout(() => {
-      window.print();
-    }, 150);
-  };
 
   const handleSave = (values: ResumeMaterialFormValues) => {
     setSubmitError("");
@@ -137,23 +120,13 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
             <div className="text-sm text-slate-500">
               字数：{content.trim().length} · 最近保存：{formatDateTime(latestSavedAt)}
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleExportPdf}
-                disabled={!content.trim()}
-                className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-sky-50 px-5 py-3 text-sm font-medium text-sky-700 transition hover:bg-sky-100 focus:outline-none focus:ring-4 focus:ring-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                导出 PDF
-              </button>
-              <button
-                type="submit"
-                disabled={isPending}
-                className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
-              >
-                {isPending ? "正在保存..." : "保存简历"}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isPending}
+              className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
+            >
+              {isPending ? "正在保存..." : "保存简历"}
+            </button>
           </div>
         </form>
 
@@ -178,18 +151,6 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
           </div>
         </div>
       </section>
-
-      {/* 导出 PDF 专用打印容器（屏幕隐藏，打印时独占一页） */}
-      {printContent ? (
-        <div className="print-area">
-          <div className="resume-page">
-            <h1>个人简历</h1>
-            <div className="resume-rule" />
-            <div className="resume-body">{printContent}</div>
-            <div className="resume-footer">由 AI 面试复盘与 JD 定制求职助手导出</div>
-          </div>
-        </div>
-      ) : null}
     </>
   );
 }
