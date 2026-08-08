@@ -137,7 +137,7 @@ export function ProjectCardWorkspace({
     );
     setSaveMessage(initialCard ? "当前卡片已加载，可以直接修改后保存。" : "当前还没有项目卡片草稿。");
     setVersionMessage(versions.length > 0 ? "下方展示的是已保存的项目卡片版本。" : "当前还没有保存过项目卡片版本。");
-  }, [initialCard, versions]);
+  }, [initialCard, versions, selectedProjectId]);
 
   // 卡片内容变化时自动暂存（编辑不丢失）
   useEffect(() => {
