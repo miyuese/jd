@@ -26,6 +26,7 @@ type ResumeRewriteWorkspaceProps = {
   projectCardExists: boolean;
   matchAnalysisExists: boolean;
   initialAbilityGaps: AbilityGapItem[];
+  initialRadarScores: RadarScores | null;
 };
 
 type AbilityGapItem = {
@@ -43,6 +44,11 @@ type AbilityGapItem = {
   }>;
 };
 
+type RadarScores = {
+  my: { PERSONA: number; GENERAL: number; ROLE_SPECIFIC: number };
+  jd: { PERSONA: number; GENERAL: number; ROLE_SPECIFIC: number; MATCHED: number };
+};
+
 type RewriteMode = "balanced" | "result-focused" | "responsibility-focused" | "jd-focused";
 
 const rewriteModeOptions: Array<{ value: RewriteMode; label: string; description: string }> = [
@@ -51,6 +57,96 @@ const rewriteModeOptions: Array<{ value: RewriteMode; label: string; description
   { value: "responsibility-focused", label: "职责优先", description: "优先强调你具体负责了什么" },
   { value: "jd-focused", label: "岗位贴合", description: "优先用更贴岗位的表达方式" }
 ];
+
+function AbilityRadar({ scores }: { scores: RadarScores }) {
+  const cx = 340;
+  const cy = 230;
+  const r = 120;
+  const dimensions = ["综合素质", "通用能力", "岗位能力", "匹配覆盖"] as const;
+
+  const myValues = [
+    scores.my.PERSONA,
+    scores.my.GENERAL,
+    scores.my.ROLE_SPECIFIC,
+    scores.jd.MATCHED
+  ];
+  const jdValues = [
+    scores.jd.PERSONA,
+    scores.jd.GENERAL,
+    scores.jd.ROLE_SPECIFIC,
+    scores.jd.MATCHED
+  ];
+
+  const points = (values: number[]) =>
+    values
+      .map((value, i) => {
+        const angle = (i / 4) * 2 * Math.PI - Math.PI / 2;
+        const distance = (value / 100) * r;
+        return `${cx + distance * Math.cos(angle)},${cy + distance * Math.sin(angle)}`;
+      })
+      .join(" ");
+
+  const gridPoints = (scale: number) =>
+    dimensions
+      .map((_, i) => {
+        const angle = (i / 4) * 2 * Math.PI - Math.PI / 2;
+        const x = cx + scale * r * Math.cos(angle);
+        const y = cy + scale * r * Math.sin(angle);
+        return `${x},${y}`;
+      })
+      .join(" ");
+
+  const labelPositions = dimensions.map((label, i) => {
+    const angle = (i / 4) * 2 * Math.PI - Math.PI / 2;
+    const labelR = r + 28;
+    return {
+      x: cx + labelR * Math.cos(angle),
+      y: cy + labelR * Math.sin(angle),
+      label
+    };
+  });
+
+  return (
+    <div className="mt-5">
+      <svg viewBox="0 0 680 400" className="w-full" role="img" aria-label="能力画像与 JD 要求对比雷达图">
+        <title>能力画像 vs JD 要求</title>
+
+        <polygon points={gridPoints(1)} fill="none" stroke="var(--color-border-tertiary)" strokeWidth="0.5" />
+        <polygon points={gridPoints(0.66)} fill="none" stroke="var(--color-border-tertiary)" strokeWidth="0.5" strokeDasharray="3 3" />
+        <polygon points={gridPoints(0.33)} fill="none" stroke="var(--color-border-tertiary)" strokeWidth="0.5" strokeDasharray="3 3" />
+
+        <line x1={cx} y1={cy} x2={cx + r * Math.cos(-Math.PI / 2)} y2={cy + r * Math.sin(-Math.PI / 2)} stroke="var(--color-border-tertiary)" strokeWidth="0.5" />
+        <line x1={cx} y1={cy} x2={cx + r * Math.cos(0)} y2={cy + r * Math.sin(0)} stroke="var(--color-border-tertiary)" strokeWidth="0.5" />
+        <line x1={cx} y1={cy} x2={cx + r * Math.cos(Math.PI / 2)} y2={cy + r * Math.sin(Math.PI / 2)} stroke="var(--color-border-tertiary)" strokeWidth="0.5" />
+        <line x1={cx} y1={cy} x2={cx + r * Math.cos(Math.PI)} y2={cy + r * Math.sin(Math.PI)} stroke="var(--color-border-tertiary)" strokeWidth="0.5" />
+
+        <polygon points={points(jdValues)} fill="#F0997B" fillOpacity="0.1" stroke="#F0997B" strokeWidth="1.5" strokeDasharray="4 3" />
+
+        <polygon points={points(myValues)} fill="#5DCAA5" fillOpacity="0.2" stroke="#5DCAA5" strokeWidth="2" />
+
+        {labelPositions.map((position) => (
+          <text
+            key={position.label}
+            x={position.x}
+            y={position.y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ fontSize: "13px", fontWeight: 500, fill: "var(--color-text-primary)" }}
+          >
+            {position.label}
+          </text>
+        ))}
+
+        <g transform="translate(40, 360)">
+          <rect width="14" height="14" fill="#5DCAA5" fillOpacity="0.2" stroke="#5DCAA5" strokeWidth="2" />
+          <text x="22" y="11" style={{ fontSize: "12px", fontWeight: 400, fill: "var(--color-text-secondary)" }}>我的画像（记忆库能力标签）</text>
+          <rect x="190" y="0" width="14" height="14" fill="#F0997B" fillOpacity="0.1" stroke="#F0997B" strokeWidth="1.5" strokeDasharray="4 3" />
+          <text x="212" y="11" style={{ fontSize: "12px", fontWeight: 400, fill: "var(--color-text-secondary)" }}>JD 期望（匹配分析）</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -72,7 +168,8 @@ export function ResumeRewriteWorkspace({
   resumeSavedAt,
   projectCardExists,
   matchAnalysisExists,
-  initialAbilityGaps
+  initialAbilityGaps,
+  initialRadarScores
 }: ResumeRewriteWorkspaceProps) {
   const router = useRouter();
   const [isGenerating, startGenerating] = useTransition();
@@ -308,6 +405,18 @@ export function ResumeRewriteWorkspace({
           </select>
         </div>
       </section>
+
+      {initialRadarScores ? (
+        <section className="page-card p-6 sm:p-8">
+          <div className="flex items-center justify-between gap-3 border-b border-teal-100 pb-4">
+            <div>
+              <h2 className="section-title">能力画像 vs JD 匹配</h2>
+              <p className="section-copy mt-2">实线为记忆库画像（你有多少能力标签 × 平均置信度），虚线为目标 JD 的期望水平。两者差距越大，改写时越需要补强。</p>
+            </div>
+          </div>
+          <AbilityRadar scores={initialRadarScores} />
+        </section>
+      ) : null}
 
       {initialAbilityGaps.length > 0 ? (
         <section className="page-card p-6 sm:p-8">

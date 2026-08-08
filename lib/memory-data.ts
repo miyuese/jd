@@ -453,6 +453,47 @@ export async function listChunksByTag(tagId: string) {
   return rows;
 }
 
+// ========== 能力画像统计（雷达图用） ==========
+
+export type AbilityTagStats = {
+  PERSONA: { count: number; avgConfidence: number };
+  GENERAL: { count: number; avgConfidence: number };
+  ROLE_SPECIFIC: { count: number; avgConfidence: number };
+};
+
+/**
+ * 按三层能力分类聚合当前用户的标签统计，用于"能力画像 vs JD 匹配"雷达图。
+ */
+export async function getAbilityTagStats(clerkUserId: string): Promise<AbilityTagStats> {
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      SELECT "category",
+             COUNT(*)::int AS "count",
+             COALESCE(AVG("confidence")::float8, 0) AS "avgConfidence"
+      FROM "JdAbilityTag"
+      WHERE "clerkUserId" = $1
+      GROUP BY "category"
+    `,
+    [clerkUserId]
+  )) as Array<{ category: AbilityCategory; count: number; avgConfidence: number }>;
+
+  const stats: AbilityTagStats = {
+    PERSONA: { count: 0, avgConfidence: 0 },
+    GENERAL: { count: 0, avgConfidence: 0 },
+    ROLE_SPECIFIC: { count: 0, avgConfidence: 0 }
+  };
+
+  for (const row of rows) {
+    stats[row.category] = {
+      count: row.count,
+      avgConfidence: row.avgConfidence ?? 0
+    };
+  }
+
+  return stats;
+}
+
 // ========== 能力缺口（面试反馈回流，闭环最后环节） ==========
 
 export type AbilityGapItem = {
