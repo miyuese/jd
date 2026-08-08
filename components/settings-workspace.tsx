@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  exportAllDataAction,
   resetAiConfigAction,
   saveAiConfigAction,
   testAiConnectionAction
@@ -45,10 +46,44 @@ export function SettingsWorkspace({
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const notify = (successMessage: string, errorMessage: string, ok: boolean) => {
     setMessage(ok ? successMessage : "");
     setError(ok ? "" : errorMessage);
+  };
+
+  const handleExportData = async () => {
+    setExporting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await exportAllDataAction();
+
+      if (!result.success) {
+        notify("", result.message, false);
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+        type: "application/json;charset=utf-8"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `jd-helper-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      notify("全部数据已导出为 JSON 备份文件（不含任何 API Key）。", "", true);
+    } catch (err) {
+      notify("", err instanceof Error ? err.message : "数据导出失败，请稍后再试。", false);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleSave = () => {
@@ -305,6 +340,30 @@ export function SettingsWorkspace({
               全部失败才会报错。演示现场模型挂了也会自动切换，不会当场卡死。
             </p>
           </div>
+        </div>
+      </section>
+
+      <section className="page-card p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-teal-100 pb-4">
+          <div>
+            <h2 className="section-title">数据导出 / 备份</h2>
+            <p className="section-copy mt-2">把所有项目、材料、卡片、JD 分析、版本历史和记忆库导出为一个 JSON 文件。</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportData}
+            disabled={exporting}
+            className="inline-flex items-center justify-center rounded-full bg-teal-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(13,148,136,0.85)] transition hover:bg-teal-700 focus:outline-none focus:ring-4 focus:ring-teal-200 disabled:cursor-not-allowed disabled:bg-teal-300"
+          >
+            {exporting ? "导出中..." : "导出全部数据（JSON）"}
+          </button>
+        </div>
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4 leading-7 text-slate-600">
+          <div className="font-medium text-slate-800">导出内容说明</div>
+          <p className="mt-2">
+            包含简历、项目、项目材料、问答记录、项目卡片、JD 与匹配分析、版本记录、记忆库证据与能力标签。
+            为安全起见，<span className="font-medium text-slate-800">不包含任何 API Key</span>，AI 配置只导出非敏感字段。
+          </p>
         </div>
       </section>
     </>

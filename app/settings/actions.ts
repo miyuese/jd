@@ -10,6 +10,7 @@ import {
   upsertAiProviderConfig
 } from "@/lib/ai-config-data";
 import { testModelConnection } from "@/lib/ai-config";
+import { exportAllUserData } from "@/lib/export-data";
 
 type ActionResult =
   | {
@@ -210,6 +211,27 @@ export async function testAiConnectionAction(input: {
     return {
       success: false,
       message: error instanceof Error ? error.message : "连接测试失败，请稍后再试。"
+    };
+  }
+}
+
+// ========== 数据导出 / 备份 ==========
+
+export async function exportAllDataAction(): Promise<ActionResult> {
+  const userId = requireClerkUserId();
+
+  try {
+    const data = await exportAllUserData(userId);
+
+    return {
+      success: true,
+      message: "全部数据已导出，浏览器将下载 JSON 备份文件。",
+      data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "数据导出失败，请稍后再试。"
     };
   }
 }
