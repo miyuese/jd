@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import {
   createAbilityTag,
+  deleteAbilityTag,
+  deleteAbilityTags,
   deleteMemorySource,
   getMemorySourceById,
   ingestText,
@@ -257,6 +259,75 @@ export async function updateAbilityStatusAction(tagId: string, status: TagStatus
     return {
       success: false,
       message: error instanceof Error ? error.message : "标签状态更新失败，请稍后再试。"
+    };
+  }
+}
+
+// ========== 标签删除（单个 / 批量） ==========
+
+export async function deleteAbilityTagAction(tagId: string): Promise<ActionResult> {
+  if (!tagId.trim()) {
+    return {
+      success: false,
+      message: "标签不存在，或你无权删除。"
+    };
+  }
+
+  const userId = requireClerkUserId();
+
+  try {
+    await deleteAbilityTag(tagId, userId);
+
+    revalidatePath("/memory");
+
+    return {
+      success: true,
+      message: "能力标签已删除。"
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "删除能力标签失败，请稍后再试。"
+    };
+  }
+}
+
+const deleteTagsSchema = z.object({
+  tagIds: z.array(z.string().min(1)).min(1, "请至少选择一个能力标签。")
+});
+
+export async function deleteAbilityTagsAction(tagIds: string[]): Promise<ActionResult> {
+  const parsed = deleteTagsSchema.safeParse({ tagIds });
+
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "批量删除失败，请检查输入后再试。"
+    };
+  }
+
+  const userId = requireClerkUserId();
+
+  try {
+    const deletedCount = await deleteAbilityTags(parsed.data.tagIds, userId);
+
+    if (deletedCount === 0) {
+      return {
+        success: false,
+        message: "没有可删除的标签，或标签已不存在。"
+      };
+    }
+
+    revalidatePath("/memory");
+
+    return {
+      success: true,
+      message: `已删除 ${deletedCount} 个能力标签。`
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "批量删除能力标签失败，请稍后再试。"
     };
   }
 }

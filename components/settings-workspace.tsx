@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Settings2 } from "lucide-react";
 import {
   exportAllDataAction,
   resetAiConfigAction,
@@ -167,8 +168,8 @@ export function SettingsWorkspace({
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-slate-100/90 via-transparent to-teal-100/70" />
         <div className="relative">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slate-600 to-teal-700 text-lg text-white shadow-[0_8px_20px_-10px_rgba(15,118,110,0.9)]">
-              ⚙️
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slate-600 to-teal-700 text-white shadow-[0_8px_20px_-10px_rgba(15,118,110,0.9)]">
+              <Settings2 className="h-5 w-5" strokeWidth={1.9} />
             </span>
             <span className="soft-chip">模型设置</span>
           </div>

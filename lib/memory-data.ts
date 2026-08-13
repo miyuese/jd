@@ -384,6 +384,37 @@ export async function updateAbilityTagStatus(tagId: string, clerkUserId: string,
   return rows[0] ?? null;
 }
 
+/** 删除单个能力标签（级联清理 JdMemoryTagChunk 关联，来源证据不受影响）。 */
+export async function deleteAbilityTag(tagId: string, clerkUserId: string) {
+  const sql = getSql();
+  await sql.query(
+    `
+      DELETE FROM "JdAbilityTag"
+      WHERE "id" = $1 AND "clerkUserId" = $2
+    `,
+    [tagId, clerkUserId]
+  );
+}
+
+/** 批量删除能力标签，返回实际删除数量（级联清理 JdMemoryTagChunk 关联）。 */
+export async function deleteAbilityTags(tagIds: string[], clerkUserId: string) {
+  if (tagIds.length === 0) {
+    return 0;
+  }
+
+  const sql = getSql();
+  const rows = (await sql.query(
+    `
+      DELETE FROM "JdAbilityTag"
+      WHERE "id" = ANY($1) AND "clerkUserId" = $2
+      RETURNING "id"
+    `,
+    [tagIds, clerkUserId]
+  )) as Array<{ id: string }>;
+
+  return rows.length;
+}
+
 // ========== 输出引用 ==========
 
 export async function createOutputCitation(input: {

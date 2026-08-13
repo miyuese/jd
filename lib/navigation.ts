@@ -1,62 +1,92 @@
-export const navItems = [
+import {
+  Brain,
+  FileText,
+  FolderKanban,
+  History,
+  Layers,
+  LayoutDashboard,
+  PenLine,
+  ScanSearch,
+  Settings2,
+  Target,
+  type LucideIcon
+} from "lucide-react";
+
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  description: string;
+};
+
+export const navItems: NavItem[] = [
   {
     href: "/workspace",
     label: "工作台",
-    icon: "🏠",
+    icon: LayoutDashboard,
     description: "项目管理与概览"
   },
   {
     href: "/memory",
     label: "记忆库",
-    icon: "🧠",
+    icon: Brain,
     description: "个人记忆与能力画像"
   },
   {
     href: "/resume-materials",
     label: "简历材料",
-    icon: "📄",
+    icon: FileText,
     description: "录入已有简历内容"
   },
   {
     href: "/project-materials",
     label: "项目材料",
-    icon: "📁",
+    icon: FolderKanban,
     description: "录入项目原始材料"
   },
   {
     href: "/project-card",
     label: "项目卡片",
-    icon: "🃏",
+    icon: Layers,
     description: "结构化项目确认"
   },
   {
     href: "/jd-analysis",
     label: "JD 分析",
-    icon: "🔍",
+    icon: ScanSearch,
     description: "岗位匹配分析"
   },
   {
     href: "/resume-rewrite",
     label: "简历改写",
-    icon: "✏️",
+    icon: PenLine,
     description: "简历表达优化"
   },
   {
     href: "/interview-prep",
     label: "面试准备",
-    icon: "🎯",
+    icon: Target,
     description: "面试讲稿生成"
   },
   {
     href: "/history",
     label: "历史版本",
-    icon: "📚",
+    icon: History,
     description: "版本管理与恢复"
   },
   {
     href: "/settings",
     label: "模型设置",
-    icon: "⚙️",
+    icon: Settings2,
     description: "AI 模型配置切换"
   }
-] as const;
+];
+
+/** 侧边导航分组（编辑式分区） */
+export const navGroups: Array<{ label: string; items: NavItem[] }> = [
+  { label: "Overview", items: [navItems[0]] },
+  { label: "Materials", items: navItems.slice(1, 4) },
+  { label: "Process", items: navItems.slice(4, 6) },
+  { label: "Output", items: navItems.slice(6, 8) },
+  { label: "System", items: navItems.slice(8, 10) }
+];

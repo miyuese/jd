@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { Moon, Sun } from "lucide-react";
 import { AuthControls } from "@/components/auth-controls";
+import { CursorGlow } from "@/components/fx/cursor-glow";
 import { SideNav } from "@/components/side-nav";
-import { hasClerkCredentials } from "@/lib/clerk-env";
 
 type AppShellProps = {
   children: ReactNode;
@@ -35,9 +36,20 @@ function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={dark ? "切换到浅色模式" : "切换到深色模式"}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-base text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+      className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink-2)] transition hover:border-[var(--brand)] hover:text-[var(--brand)] dark:bg-[var(--surface)]"
     >
-      {dark ? "☀️" : "🌙"}
+      <Sun
+        className={`absolute h-[18px] w-[18px] transition-all duration-500 ${
+          dark ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"
+        }`}
+        strokeWidth={1.8}
+      />
+      <Moon
+        className={`absolute h-[18px] w-[18px] transition-all duration-500 ${
+          dark ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"
+        }`}
+        strokeWidth={1.8}
+      />
     </button>
   );
 }
@@ -47,17 +59,24 @@ export function AppShell({ children, clerkEnabled }: AppShellProps) {
   const isAuthPage = pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
 
   return (
-    <div className="min-h-screen bg-slate-50 transition-colors duration-200 dark:bg-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur transition-colors duration-200 dark:border-slate-800 dark:bg-slate-900/90">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--ink)] transition-colors duration-300">
+      <CursorGlow />
+
+      <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_80%,transparent)] backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-sm font-semibold text-white shadow-[0_8px_20px_-10px_rgba(83,74,183,0.9)]">
+          <Link href="/" className="group flex items-center gap-3">
+            <span className="flex h-9 w-9 -rotate-6 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--brand),var(--brand-strong))] text-sm font-bold text-white shadow-[0_10px_26px_-10px_var(--glow)] transition-transform duration-300 group-hover:rotate-0">
               J
             </span>
-            <span className="text-lg font-semibold text-slate-900 dark:text-slate-100">JD 助手</span>
+            <span className="flex flex-col leading-none">
+              <span className="text-[15px] font-bold tracking-tight text-[var(--ink)]">JD Helper</span>
+              <span className="mt-1 text-[10px] font-medium uppercase tracking-[0.26em] text-[var(--ink-faint)]">
+                Signal System
+              </span>
+            </span>
           </Link>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <ThemeToggle />
             <AuthControls clerkEnabled={clerkEnabled} />
           </div>
@@ -66,13 +85,13 @@ export function AppShell({ children, clerkEnabled }: AppShellProps) {
 
       <div
         className={[
-          "mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-8",
-          isAuthPage ? "lg:grid-cols-1" : "lg:grid-cols-[240px_minmax(0,1fr)]"
+          "mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-10",
+          isAuthPage ? "lg:grid-cols-1" : "lg:grid-cols-[248px_minmax(0,1fr)]"
         ].join(" ")}
       >
         {!isAuthPage ? (
           <aside className="min-w-0">
-            <div className="sticky top-20 rounded-3xl border border-slate-200 bg-white p-3 shadow-sm transition-colors duration-200 dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-none">
+            <div className="sticky top-[5.5rem] rounded-[28px] border border-[var(--line)] bg-[var(--surface)] p-3 backdrop-blur-xl">
               <SideNav />
             </div>
           </aside>

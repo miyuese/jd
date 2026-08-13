@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Brain, CheckSquare, Square, Trash2, X } from "lucide-react";
 import {
+  deleteAbilityTagAction,
+  deleteAbilityTagsAction,
   deleteMemorySourceAction,
   extractAbilitiesAction,
   getTagEvidenceAction,
@@ -101,6 +104,8 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
   const [expandedEvidence, setExpandedEvidence] = useState<Record<string, EvidenceItem[]>>({});
   const [loadingEvidenceId, setLoadingEvidenceId] = useState<string | null>(null);
   const [extractingSourceId, setExtractingSourceId] = useState<string | null>(null);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setSources(initialSources);
@@ -174,6 +179,62 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
     runAction(() => updateAbilityStatusAction(tagId, status));
   };
 
+  const handleDeleteTag = (tagId: string, tagName: string) => {
+    if (!window.confirm(`确定删除能力标签「${tagName}」吗？删除后将解除与证据片段的关联，且无法恢复。`)) {
+      return;
+    }
+
+    runAction(() => deleteAbilityTagAction(tagId));
+  };
+
+  const enterBatchMode = () => {
+    setSelectedTagIds(new Set());
+    setBatchMode(true);
+  };
+
+  const exitBatchMode = () => {
+    setSelectedTagIds(new Set());
+    setBatchMode(false);
+  };
+
+  const toggleTagSelected = (tagId: string) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) {
+        next.delete(tagId);
+      } else {
+        next.add(tagId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedTagIds((prev) => {
+      const allSelected = prev.size === abilities.length;
+      return allSelected ? new Set() : new Set(abilities.map((tag) => tag.id));
+    });
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedTagIds.size === 0) {
+      setError("请先勾选要删除的能力标签。");
+      return;
+    }
+
+    if (!window.confirm(`确定删除选中的 ${selectedTagIds.size} 个能力标签吗？删除后将解除与证据片段的关联，且无法恢复。`)) {
+      return;
+    }
+
+    const ids = Array.from(selectedTagIds);
+
+    runAction(() => deleteAbilityTagsAction(ids), (result) => {
+      if (result && (result as { success?: boolean }).success) {
+        exitBatchMode();
+      }
+    });
+  };
+
   const handleToggleEvidence = async (tagId: string) => {
     if (expandedEvidence[tagId]) {
       const next = { ...expandedEvidence };
@@ -225,8 +286,8 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
         <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-teal-100/50 blur-3xl" />
         <div className="relative">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-lg text-white shadow-[0_8px_20px_-10px_rgba(13,148,136,0.9)]">
-              🧠
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-[0_8px_20px_-10px_rgba(13,148,136,0.9)]">
+              <Brain className="h-5 w-5" strokeWidth={1.9} />
             </span>
             <span className="soft-chip">个人记忆系统</span>
           </div>
@@ -236,7 +297,7 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
           </p>
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />证据不可变，只增不改</span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />标签可确认 / 可驳回</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />标签可确认 / 可驳回 / 可删除</span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />输出句句可溯源</span>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-100 bg-teal-50 px-3 py-1 text-teal-700"><span className="h-1.5 w-1.5 rounded-full bg-teal-500" />面试教训回流补强</span>
           </div>
@@ -414,9 +475,51 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
           <div>
             <h2 className="section-title">能力画像（{abilities.length}）</h2>
             <p className="section-copy mt-2">
-              {confirmedAbilities} 个已确认 · {pendingAbilities} 个待确认。点击标签可展开证据溯源。
+              {confirmedAbilities} 个已确认 · {pendingAbilities} 个待确认。点击标签可展开证据溯源；不满意的标签可直接删除或批量管理。
             </p>
           </div>
+
+          {batchMode ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">
+                已选 {selectedTagIds.size} / {abilities.length}
+              </span>
+              <button
+                type="button"
+                onClick={toggleSelectAll}
+                disabled={isPending}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {selectedTagIds.size === abilities.length ? "取消全选" : "全选"}
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={isPending || selectedTagIds.size === 0}
+                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isPending ? "删除中..." : `删除选中（${selectedTagIds.size}）`}
+              </button>
+              <button
+                type="button"
+                onClick={exitBatchMode}
+                disabled={isPending}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <X className="h-3.5 w-3.5" />
+                退出
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={enterBatchMode}
+              className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              批量管理
+            </button>
+          )}
         </div>
 
         {abilities.length === 0 ? (
@@ -437,14 +540,37 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
                   <div className="text-sm font-medium text-slate-800">{categoryLabels[category]}</div>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     {categoryAbilities.map((tag) => (
-                      <div key={tag.id} className="rounded-2xl border border-slate-100 bg-white p-4">
+                      <div
+                        key={tag.id}
+                        className={`rounded-2xl border p-4 transition ${
+                          batchMode && selectedTagIds.has(tag.id)
+                            ? "border-teal-300 bg-teal-50/70 ring-2 ring-teal-100"
+                            : "border-slate-100 bg-white"
+                        }`}
+                      >
                         <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${categoryColors[tag.category]}`}
-                          >
-                            {tag.name}
-                          </span>
-                          <span className="text-xs text-slate-400">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {batchMode ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleTagSelected(tag.id)}
+                                aria-label={selectedTagIds.has(tag.id) ? `取消选择 ${tag.name}` : `选择 ${tag.name}`}
+                                className="shrink-0 text-slate-400 transition hover:text-teal-600"
+                              >
+                                {selectedTagIds.has(tag.id) ? (
+                                  <CheckSquare className="h-4 w-4 text-teal-600" />
+                                ) : (
+                                  <Square className="h-4 w-4" />
+                                )}
+                              </button>
+                            ) : null}
+                            <span
+                              className={`truncate rounded-full border px-2.5 py-0.5 text-xs font-medium ${categoryColors[tag.category]}`}
+                            >
+                              {tag.name}
+                            </span>
+                          </div>
+                          <span className="shrink-0 text-xs text-slate-400">
                             置信度 {(tag.confidence * 100).toFixed(0)}% · {statusLabels[tag.status]}
                           </span>
                         </div>
@@ -461,7 +587,7 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
                           >
                             {loadingEvidenceId === tag.id ? "查询中..." : expandedEvidence[tag.id] ? "收起证据" : "查看证据"}
                           </button>
-                          {tag.status !== "CONFIRMED" ? (
+                          {!batchMode && tag.status !== "CONFIRMED" ? (
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(tag.id, "CONFIRMED")}
@@ -471,7 +597,7 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
                               确认
                             </button>
                           ) : null}
-                          {tag.status !== "REJECTED" ? (
+                          {!batchMode && tag.status !== "REJECTED" ? (
                             <button
                               type="button"
                               onClick={() => handleUpdateStatus(tag.id, "REJECTED")}
@@ -481,12 +607,25 @@ export function MemoryWorkspace({ initialSources, initialAbilities }: MemoryWork
                               驳回
                             </button>
                           ) : null}
+                          {!batchMode ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTag(tag.id, tag.name)}
+                              disabled={isPending}
+                              className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              删除
+                            </button>
+                          ) : null}
                         </div>
 
                         {expandedEvidence[tag.id] ? (
                           <div className="mt-3 space-y-2 rounded-2xl bg-slate-50 p-3">
                             {expandedEvidence[tag.id].length === 0 ? (
-                              <div className="text-xs text-slate-400">该标签暂无证据。</div>
+                              <div className="text-xs leading-5 text-slate-400">
+                                该标签暂无证据（来源可能已被删除）。可点击「删除」清理这个无源标签。
+                              </div>
                             ) : (
                               expandedEvidence[tag.id].map((evidence) => (
                                 <div key={evidence.chunkId} className="rounded-xl bg-white p-3">
