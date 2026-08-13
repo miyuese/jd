@@ -4,9 +4,15 @@ const nextConfig = {
     serverComponentsExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js"],
     // 把 tesseract 语言包显式打进 /api/upload-parse 的函数部署包，
     // 否则 Vercel 打包时 public/ 静态资源与函数运行时目录分离，OCR 会找不到语言包。
+    // 同时必须把 pdfjs 的 worker 文件打进去：pdfjs 运行时内部动态加载该文件，
+    // 打包器静态分析不到，不显式包含会导致 "Setting up fake worker failed"。
     // 注意：Next 14.2 中该字段在 experimental 内生效（collect-build-traces 从 config.experimental 读取）。
     outputFileTracingIncludes: {
-      "/api/upload-parse": ["./public/tesseract-data/**"]
+      "/api/upload-parse": [
+        "./public/tesseract-data/**",
+        "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs",
+        "./node_modules/pdfjs-dist/legacy/build/pdf.worker.min.mjs"
+      ]
     }
   }
 };

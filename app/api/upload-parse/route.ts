@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { NextRequest, NextResponse } from "next/server";
 
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -72,9 +73,17 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 async function extractPdfTextDirect(buffer: Buffer): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  // 注意：不要手动设置 GlobalWorkerOptions.workerSrc。
-  // pdfjs v5 在 Node 端会自动使用内置 fake worker，不依赖外部 worker 文件；
-  // 手动指向 node_modules 绝对路径会导致 Vercel/Lambda 打包时找不到该文件而报错。
+  // worker 文件必须存在：pdfjs 在 Node 端总是通过 fake worker 动态 import 该文件。
+  // 部署包由 next.config.mjs 的 outputFileTracingIncludes 显式携带
+  // （node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs），本地则由完整 node_modules 提供。
+  try {
+    const workerUrl = pathToFileURL(
+      path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs")
+    ).href;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  } catch {
+    // 路径构造失败时保持默认，让 pdfjs 自行解析
+  }
 
   const uint8Array = new Uint8Array(buffer);
   const doc = await pdfjsLib.getDocument({ data: uint8Array, useSystemFonts: true }).promise;
@@ -128,7 +137,16 @@ async function ocrPdfPages(buffer: Buffer): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
 
-  // 同 extractPdfTextDirect：不手动设置 workerSrc，依赖 pdfjs v5 内置 fake worker。
+  // 同 extractPdfTextDirect：worker 文件由 outputFileTracingIncludes 打进部署包，
+  // 显式指定路径确保 fake worker 可加载。
+  try {
+    const workerUrl = pathToFileURL(
+      path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs")
+    ).href;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  } catch {
+    // 路径构造失败时保持默认，让 pdfjs 自行解析
+  }
 
   const uint8Array = new Uint8Array(buffer);
   const doc = await pdfjsLib.getDocument({ data: uint8Array, useSystemFonts: true }).promise;
