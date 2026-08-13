@@ -1,5 +1,5 @@
+import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { NextRequest, NextResponse } from "next/server";
 
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -8,7 +8,56 @@ const ALLOWED_TYPES = [DOCX_TYPE, PDF_TYPE, "image/jpeg", "image/png"];
 const ALLOWED_EXTENSIONS = [".docx", ".pdf", ".jpg", ".jpeg", ".png"];
 const OCR_TIMEOUT_MS = 120_000;
 
-const LANG_PATH = path.join(process.cwd(), "public", "tesseract-data");
+// 扫描型 PDF 的 OCR 页数上限（超出提示用户拆分上传，避免函数超时）
+const MAX_SCAN_OCR_PAGES = 8;
+
+/**
+ * 解析 tesseract 语言包目录。
+ * - 本地开发：public/tesseract-data 直接可读
+ * - Vercel/Lambda：通过 outputFileTracingIncludes 将语言包打进函数包，
+ *   目录可能随部署结构变化，这里按优先级探测多个候选路径。
+ */
+function resolveLangPath(): string {
+  const candidates = [
+    path.join(process.cwd(), "public", "tesseract-data"),
+    path.join(process.cwd(), "public", "tesseract-data", "4.0.0"),
+    path.join(process.cwd(), ".next", "server", "app", "api", "upload-parse", "public", "tesseract-data")
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    } catch {
+      // 路径探测失败继续尝试下一个
+    }
+  }
+
+  return candidates[0];
+}
+
+const LANG_PATH = resolveLangPath();
+
+// Vercel 函数最大执行时长（Hobby 上限 300s，OCR 需要宽松上限）
+export const maxDuration = 300;
+
+/**
+ * [预留扩展点] 云 OCR 服务接入位（本期不启用）。
+ * tesseract.js 对低清图片 / 复杂版式识别精度有限，后续可在此接入
+ * 腾讯云 OCR / 阿里云 OCR 等云端识别服务作为高精度兜底：
+ *
+ * 1. 在 lib/ 下新增 cloud-ocr.ts，封装对应 SDK（如 tencentcloud-sdk-nodejs-ocr）；
+ * 2. 在 ocrBuffer / ocrPdfPages 失败或置信度低时调用；
+ * 3. 通过环境变量注入 SecretId / SecretKey（勿硬编码）。
+ *
+ * 接入后按置信度对比：云端返回置信度更高时优先采用云端结果。
+ */
+// async function ocrWithCloudService(imageBuffer: Buffer): Promise<string | null> {
+//   // TODO: 接入云 OCR，返回识别文本；失败返回 null 交给本地 tesseract 兜底
+//   return null;
+// }
+
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -23,10 +72,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 async function extractPdfTextDirect(buffer: Buffer): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  const workerUrl = pathToFileURL(
-    path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs")
-  ).href;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  // 注意：不要手动设置 GlobalWorkerOptions.workerSrc。
+  // pdfjs v5 在 Node 端会自动使用内置 fake worker，不依赖外部 worker 文件；
+  // 手动指向 node_modules 绝对路径会导致 Vercel/Lambda 打包时找不到该文件而报错。
 
   const uint8Array = new Uint8Array(buffer);
   const doc = await pdfjsLib.getDocument({ data: uint8Array, useSystemFonts: true }).promise;
@@ -80,10 +128,7 @@ async function ocrPdfPages(buffer: Buffer): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
 
-  const workerUrl = pathToFileURL(
-    path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", "pdf.worker.mjs")
-  ).href;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+  // 同 extractPdfTextDirect：不手动设置 workerSrc，依赖 pdfjs v5 内置 fake worker。
 
   const uint8Array = new Uint8Array(buffer);
   const doc = await pdfjsLib.getDocument({ data: uint8Array, useSystemFonts: true }).promise;
@@ -92,7 +137,9 @@ async function ocrPdfPages(buffer: Buffer): Promise<string> {
   const worker = await createOcrWorker();
 
   try {
-    for (let i = 1; i <= doc.numPages; i++) {
+    const pagesToOcr = Math.min(doc.numPages, MAX_SCAN_OCR_PAGES);
+
+    for (let i = 1; i <= pagesToOcr; i++) {
       const page = await doc.getPage(i);
       const viewport = page.getViewport({ scale: 2.0 });
       const canvas = createCanvas(viewport.width, viewport.height);
@@ -115,7 +162,14 @@ async function ocrPdfPages(buffer: Buffer): Promise<string> {
     await worker.terminate();
   }
 
-  return pageTexts.join("\n\n");
+  const result = pageTexts.join("\n\n");
+
+  // 页数超上限时，OCR 只处理前 MAX_SCAN_OCR_PAGES 页，提示用户后续页未识别
+  if (doc.numPages > MAX_SCAN_OCR_PAGES) {
+    return `${result}\n\n[提示] 该扫描 PDF 共 ${doc.numPages} 页，为避免处理超时仅识别了前 ${MAX_SCAN_OCR_PAGES} 页，请手动补充剩余内容。`;
+  }
+
+  return result;
 }
 
 export async function POST(request: NextRequest) {
