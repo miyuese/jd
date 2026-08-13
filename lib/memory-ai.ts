@@ -1,7 +1,8 @@
 import "server-only";
 
 import { z } from "zod";
-import { generateTextRobust } from "@/lib/ai-config";
+import { generateStructuredJson, generateTextRobust } from "@/lib/ai-config";
+import { extractJsonFromText, extractStringArray } from "@/lib/ai-json";
 import type { AbilityCategory, TagStatus } from "@/lib/memory-data";
 
 // ========== 能力标签抽取 ==========
@@ -26,56 +27,11 @@ export type ExtractedAbility = {
   evidenceChunkIds: string[];
 };
 
-function normalizeJsonText(value: string) {
-  return value.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-}
-
 /**
- * 从模型原始输出中提取 JSON 对象。
+ * 从模型原始输出中提取 JSON 对象（见 lib/ai-json.ts 的多层兜底实现）。
  * 部分模型（如 deepseek-v4-flash）会先输出分析过程再输出 JSON，
- * 或者因 token 上限被截断在分析中途。这里尝试：
- * 1. 直接解析整个输出
- * 2. 截取最后一个 { 到末尾的片段（丢弃截断的分析）
- * 3. 若仍失败抛错
+ * 或者因 token 上限被截断在分析中途，兜底解析尽量抢救合法 JSON。
  */
-function extractJsonFromText(text: string): unknown {
-  const normalized = normalizeJsonText(text);
-
-  if (!normalized) {
-    throw new Error("模型没有返回可解析的能力标签，请稍后再试。");
-  }
-
-  // 尝试 1：整体解析
-  try {
-    return JSON.parse(normalized);
-  } catch {
-    // 继续尝试截取
-  }
-
-  // 尝试 2：找到第一个 { 开始，尝试整体
-  const firstBrace = normalized.indexOf("{");
-  if (firstBrace >= 0) {
-    const candidate = normalized.slice(firstBrace);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // 继续尝试
-    }
-  }
-
-  // 尝试 3：从最后一个 { 截取（处理"分析在前、JSON 在后"的情况）
-  const lastBrace = normalized.lastIndexOf("{");
-  if (lastBrace >= 0) {
-    const candidate = normalized.slice(lastBrace);
-    try {
-      return JSON.parse(candidate);
-    } catch {
-      // 继续尝试
-    }
-  }
-
-  throw new Error("模型返回内容无法解析为能力标签，请重试或更换模型。");
-}
 
 export async function extractAbilityTags(input: {
   chunks: Array<{ id: string; content: string }>;
@@ -152,16 +108,10 @@ export async function extractGapTagsFromFeedback(input: {
   });
   const { text } = llm;
 
-  const normalizedText = normalizeJsonText(text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的能力缺口，请稍后再试。");
-  }
-
   let parsed: unknown;
 
   try {
-    parsed = JSON.parse(normalizedText);
+    parsed = extractJsonFromText(text);
   } catch {
     throw new Error("模型返回内容无法解析为能力缺口，请重试或更换模型。");
   }
@@ -176,19 +126,6 @@ export async function extractGapTagsFromFeedback(input: {
 }
 
 // ========== 按 JD 调用：带证据引用的简历改写 ==========
-
-const jdCallOutputSchema = z.object({
-  rewrite: z.string().min(1),
-  reasoning: z.string().optional(),
-  highlights: z.array(z.string()).max(6).optional(),
-  citations: z.array(
-    z.object({
-      sentenceId: z.string(),
-      chunkId: z.string(),
-      kind: z.enum(["DIRECT_QUOTE", "PARAPHRASE", "INFERENCE"])
-    })
-  ).optional()
-});
 
 export type JdCallResult = {
   rewrite: string;
@@ -228,47 +165,59 @@ export async function generateResumeWithMemory(input: {
         .join("\n\n")
     : "（暂无匹配的记忆证据）";
 
-  const llm = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个简历改写助手。你要基于项目事实、岗位匹配分析和用户记忆库中的证据，生成一版贴合目标岗位的简历项目描述。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成简历改写草稿，并标注每句话的证据引用。\n\n已有简历内容：${input.resumeText}\n\n项目卡片标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n\n记忆库证据（可引用，不得超出此范围编造）：\n${evidenceText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"rewrite":"...","reasoning":"...","highlights":[...],"citations":[{"sentenceId":"s1","chunkId":"证据id","kind":"DIRECT_QUOTE|PARAPHRASE|INFERENCE"}]}。\n3. rewrite 必须是一段适合放进简历项目描述里的文本，优先引用项目中的具体动作、模块、协作方式和结果。\n4. citations 中：直接来自证据原文的标 DIRECT_QUOTE；基于证据改写的标 PARAPHRASE；无法对应任何证据的推断标 INFERENCE（这类句子应尽量少）。\n5. 句子编号规则：把 rewrite 按句号/分号拆成多个句子，第一句是 s1，第二句是 s2，以此类推，citations 里的 sentenceId 对应这些编号。\n6. 不得编造事实。\n7. 使用简体中文，保持简历表达风格。`,
-    maxOutputTokens: 1200
+    maxOutputTokens: 5000,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { rewrite?: unknown };
+      return typeof record.rewrite === "string" && record.rewrite.trim().length > 0;
+    },
+    parse: (parsed) => {
+      const record = parsed as {
+        rewrite?: unknown;
+        reasoning?: unknown;
+        highlights?: unknown;
+        citations?: unknown;
+      };
+      return {
+        rewrite: typeof record.rewrite === "string" ? record.rewrite.trim() : "",
+        reasoning: typeof record.reasoning === "string" ? record.reasoning.trim() : "",
+        highlights: extractStringArray(record.highlights),
+        citations: Array.isArray(record.citations)
+          ? record.citations
+              .filter(
+                (item): item is { sentenceId?: unknown; chunkId?: unknown; kind?: unknown } =>
+                  typeof item === "object" && item !== null
+              )
+              .map((item) => {
+                const kind: "DIRECT_QUOTE" | "PARAPHRASE" | "INFERENCE" =
+                  item.kind === "DIRECT_QUOTE" || item.kind === "PARAPHRASE" || item.kind === "INFERENCE"
+                    ? item.kind
+                    : "PARAPHRASE";
+                return {
+                  sentenceId: typeof item.sentenceId === "string" ? item.sentenceId : "",
+                  chunkId: typeof item.chunkId === "string" ? item.chunkId : "",
+                  kind
+                };
+              })
+              .filter((citation) => citation.sentenceId && citation.chunkId)
+          : []
+      };
+    }
   });
-  const { text } = llm;
-
-  const normalizedText = normalizeJsonText(text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的简历改写草稿，请稍后再试。");
-  }
-
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(normalizedText);
-  } catch {
-    throw new Error("模型返回内容无法解析为简历改写草稿，请重试或更换模型。");
-  }
-
-  const result = jdCallOutputSchema.safeParse(parsed);
-
-  if (!result.success) {
-    throw new Error("模型返回的简历改写格式不符合要求，请重试或更换模型。");
-  }
 
   const validChunkIds = new Set(input.memoryEvidence.map((item) => item.chunkId));
 
   return {
     rewrite: result.data.rewrite,
-    reasoning: result.data.reasoning ?? "",
-    highlights: result.data.highlights ?? [],
-    citations: (result.data.citations ?? [])
-      .filter((citation) => validChunkIds.has(citation.chunkId))
-      .map((citation) => ({
-        sentenceId: citation.sentenceId,
-        chunkId: citation.chunkId,
-        kind: citation.kind
-      })),
-    model: llm.usedModel
+    reasoning: result.data.reasoning,
+    highlights: result.data.highlights,
+    citations: result.data.citations.filter((citation) => validChunkIds.has(citation.chunkId)),
+    model: result.model
   };
 }

@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import type { LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { getActiveAiProviderConfig } from "@/lib/ai-config-data";
+import { extractJsonFromText, normalizeStringArray, extractString, extractStringArray } from "@/lib/ai-json";
 
 export const requiredAiEnvKeys = ["AI_API_BASE_URL", "AI_API_KEY", "AI_MODEL"] as const;
 
@@ -44,58 +45,6 @@ function createSandboxModel() {
 
 export function createAiModel() {
   return createSandboxModel();
-}
-
-function normalizeJsonText(value: string) {
-  return value.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-}
-
-function normalizeStringArray(value: unknown) {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === "string") {
-          return item.trim();
-        }
-
-        if (typeof item === "object" && item !== null) {
-          const record = item as Record<string, unknown>;
-          const orderedFields = [
-            ["point", "结论"],
-            ["evidence", "证据"],
-            ["issue", "问题"],
-            ["risk", "风险"],
-            ["gap", "差距"],
-            ["suggestion", "建议"],
-            ["recommendation", "建议"],
-            ["action", "行动"],
-            ["reason", "原因"],
-            ["detail", "细节"]
-          ] as const;
-          const parts = orderedFields
-            .flatMap(([key, label]) => {
-              const fieldValue = record[key];
-              return typeof fieldValue === "string" && fieldValue.trim() ? [{ label, value: fieldValue.trim() }] : [];
-            });
-
-          if (parts.length > 0) {
-            return parts.map((part) => `${part.label}：${part.value}`).join("；");
-          }
-        }
-
-        return "";
-      })
-      .filter(Boolean);
-  }
-
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n|[；;]/)
-      .map((item) => item.replace(/^[-*\d.、\s]+/, "").trim())
-      .filter(Boolean);
-  }
-
-  return [];
 }
 
 // ========== 模型配置解析（DB 优先，环境变量兜底） ==========
@@ -171,6 +120,63 @@ export async function generateTextRobust(
     : new Error("所有 AI 模型均调用失败，请检查模型配置或稍后再试。");
 }
 
+type StructuredCallOptions = {
+  system: string;
+  prompt: string;
+  maxOutputTokens: number;
+  temperature?: number;
+  /** 校验解析结果是否可用；返回 false 表示格式不合格，触发重试 */
+  validate: (parsed: unknown) => boolean;
+  /** 额外重试次数（首次调用之外），默认 1 次 */
+  extraRetries?: number;
+};
+
+/**
+ * 结构化 JSON 生成入口：模型调用 + 容错 JSON 提取 + 格式校验。
+ * 模型「返回了内容但格式不对」时（JSON 解析失败 / 字段缺失），
+ * 会额外重试 1-2 次（重试会重新走模型列表，天然带上备用模型），
+ * 避免"格式错误直接抛给用户、只能手动重试"的脆弱体验。
+ */
+export async function generateStructuredJson<T>(
+  options: StructuredCallOptions & { parse: (parsed: unknown) => T }
+): Promise<{ data: T; model: string }> {
+  const retries = options.extraRetries ?? 1;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const result = await generateTextRobust({
+      system: options.system,
+      prompt: options.prompt,
+      maxOutputTokens: options.maxOutputTokens,
+      ...(options.temperature !== undefined ? { temperature: options.temperature } : {})
+    });
+
+    let parsed: unknown;
+
+    try {
+      parsed = extractJsonFromText(result.text);
+    } catch (error) {
+      if (attempt < retries) {
+        console.warn(`[AI 结构化输出] 第 ${attempt + 1} 次 JSON 提取失败，准备重试: ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+      throw error;
+    }
+
+    if (options.validate(parsed)) {
+      return { data: options.parse(parsed), model: result.usedModel };
+    }
+
+    if (attempt < retries) {
+      console.warn(`[AI 结构化输出] 第 ${attempt + 1} 次格式校验未通过，准备重试`);
+    } else {
+      throw new Error("模型返回内容格式不符合要求，请稍后再试。");
+    }
+  }
+
+  // 理论上不会走到这里（上面必然 return 或 throw），仅作类型收口
+  throw new Error("模型返回内容格式不符合要求，请稍后再试。");
+}
+
 /** 测试一组模型配置是否可用（设置页「测试连接」用，不写入数据库）。 */
 export async function testModelConnection(input: {
   providerName?: string;
@@ -235,38 +241,29 @@ export async function generateInterviewQuestions(input: {
   currentNeed: string;
   materialText: string;
 }) {
-  const result = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个求职项目复盘教练。你要根据项目原始材料，输出采访式追问，帮助用户把真实经历讲清楚。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成首轮采访问题。\n\n项目名称：${input.projectName}\n目标岗位：${input.targetRole}\n当前需求：${input.currentNeed}\n项目原始材料：${input.materialText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"questions":["问题1","问题2","问题3"]}。\n3. 生成 3 到 5 条中文问题。\n4. 问题要具体，优先追问项目背景、职责、关键动作、判断依据、结果指标和协作细节。\n5. 不要输出空泛鼓励语，不要重复。`,
-    maxOutputTokens: 600
+    maxOutputTokens: 800,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { questions?: unknown };
+      return Array.isArray(record.questions) && record.questions.length > 0;
+    },
+    parse: (parsed) => {
+      const record = parsed as { questions?: unknown };
+      return {
+        questions: extractStringArray(record.questions)
+      };
+    }
   });
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的问题内容，请稍后再试。\n");
-  }
-
-  let parsed: { questions?: unknown };
-
-  try {
-    parsed = JSON.parse(normalizedText) as { questions?: unknown };
-  } catch {
-    throw new Error("模型返回内容无法解析为问题列表，请重试或更换模型。");
-  }
-
-  const questions = Array.isArray(parsed.questions)
-    ? parsed.questions.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
-
-  if (questions.length === 0) {
-    throw new Error("模型没有生成有效问题，请补充项目材料后再试。");
-  }
-
   return {
-    questions,
-    model: result.usedModel
+    questions: result.data.questions,
+    model: result.model
   };
 }
 
@@ -286,111 +283,90 @@ export async function generateProjectCardDraft(input: {
         .join("\n\n")
     : "当前还没有已保存问答，请主要基于项目原始材料生成草稿。";
 
-  const llm = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个求职项目复盘教练。你要把项目原始材料和复盘问答整理成结构化项目卡片草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成项目卡片草稿。\n\n项目名称：${input.projectName}\n目标岗位：${input.targetRole}\n当前需求：${input.currentNeed}\n项目原始材料：${input.materialText}\n\n已保存问答：\n${qaText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"title":"...","background":"...","responsibility":"...","result":"..."}。\n3. 所有字段都必须有内容，使用简体中文。\n4. background 聚焦项目背景、目标和问题场景。\n5. responsibility 聚焦你的职责、关键动作和决策。\n6. result 聚焦结果、效果、指标或价值。\n7. 不要编造明显超出材料的信息，不确定的地方宁可保持保守表达。`,
-    maxOutputTokens: 900
+    maxOutputTokens: 1500,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { title?: unknown; background?: unknown; responsibility?: unknown; result?: unknown };
+      return (
+        extractString(record.title).length > 0 &&
+        extractString(record.background).length > 0 &&
+        extractString(record.responsibility).length > 0 &&
+        extractString(record.result).length > 0
+      );
+    },
+    parse: (parsed) => {
+      const record = parsed as { title?: unknown; background?: unknown; responsibility?: unknown; result?: unknown };
+      return {
+        title: extractString(record.title),
+        background: extractString(record.background),
+        responsibility: extractString(record.responsibility),
+        result: extractString(record.result)
+      };
+    }
   });
-  const { text } = llm;
-
-  const normalizedText = normalizeJsonText(text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的项目卡片草稿，请稍后再试。");
-  }
-
-  let parsed: {
-    title?: unknown;
-    background?: unknown;
-    responsibility?: unknown;
-    result?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as {
-      title?: unknown;
-      background?: unknown;
-      responsibility?: unknown;
-      result?: unknown;
-    };
-  } catch {
-    throw new Error("模型返回内容无法解析为项目卡片草稿，请重试或更换模型。");
-  }
-
-  const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
-  const background = typeof parsed.background === "string" ? parsed.background.trim() : "";
-  const responsibility = typeof parsed.responsibility === "string" ? parsed.responsibility.trim() : "";
-  const result = typeof parsed.result === "string" ? parsed.result.trim() : "";
-
-  if (!title || !background || !responsibility || !result) {
-    throw new Error("模型生成的项目卡片字段不完整，请补充材料后再试。");
-  }
 
   return {
-    title,
-    background,
-    responsibility,
-    result,
-    model: llm.usedModel
+    title: result.data.title,
+    background: result.data.background,
+    responsibility: result.data.responsibility,
+    result: result.data.result,
+    model: result.model
   };
 }
 
 export async function generateJdCapabilitySummary(input: { rawText: string }) {
-  const result = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个岗位分析助手。你要把 JD 原文提炼成结构化岗位能力摘要。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面的 JD 原文，输出岗位能力摘要。\n\nJD 原文：${input.rawText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"responsibilities":[...],"capabilities":[...],"priorities":[{"label":"...","level":"high|medium|low"}]}。\n3. responsibilities 输出 3 到 5 条岗位职责重点。\n4. capabilities 输出 4 到 8 个能力关键词。\n5. priorities 输出 3 到 5 条优先级判断。\n6. 使用简体中文。`,
-    maxOutputTokens: 900
+    maxOutputTokens: 1200,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { responsibilities?: unknown; capabilities?: unknown; priorities?: unknown };
+      return (
+        extractStringArray(record.responsibilities).length > 0 &&
+        extractStringArray(record.capabilities).length > 0 &&
+        Array.isArray(record.priorities) &&
+        record.priorities.length > 0
+      );
+    },
+    parse: (parsed) => {
+      const record = parsed as {
+        responsibilities?: unknown;
+        capabilities?: unknown;
+        priorities?: unknown;
+      };
+      const priorities = Array.isArray(record.priorities)
+        ? record.priorities
+            .filter((item): item is { label?: unknown; level?: unknown } => typeof item === "object" && item !== null)
+            .map((item) => ({
+              label: typeof item.label === "string" ? item.label.trim() : "",
+              level: typeof item.level === "string" ? item.level.trim() : "medium"
+            }))
+            .filter((item) => item.label)
+        : [];
+
+      return {
+        responsibilities: extractStringArray(record.responsibilities),
+        capabilities: extractStringArray(record.capabilities),
+        priorities
+      };
+    }
   });
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的 JD 能力摘要，请稍后再试。");
-  }
-
-  let parsed: {
-    responsibilities?: unknown;
-    capabilities?: unknown;
-    priorities?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as {
-      responsibilities?: unknown;
-      capabilities?: unknown;
-      priorities?: unknown;
-    };
-  } catch {
-    throw new Error("模型返回内容无法解析为 JD 摘要，请重试或更换模型。");
-  }
-
-  const responsibilities = Array.isArray(parsed.responsibilities)
-    ? parsed.responsibilities.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
-  const capabilities = Array.isArray(parsed.capabilities)
-    ? parsed.capabilities.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
-  const priorities = Array.isArray(parsed.priorities)
-    ? parsed.priorities
-        .filter((item): item is { label?: unknown; level?: unknown } => typeof item === "object" && item !== null)
-        .map((item) => ({
-          label: typeof item.label === "string" ? item.label.trim() : "",
-          level: typeof item.level === "string" ? item.level.trim() : "medium"
-        }))
-        .filter((item) => item.label)
-    : [];
-
-  if (responsibilities.length === 0 || capabilities.length === 0 || priorities.length === 0) {
-    throw new Error("模型生成的 JD 摘要不完整，请稍后再试。");
-  }
-
   return {
-    responsibilities,
-    capabilities,
-    priorities,
-    model: result.usedModel
+    responsibilities: result.data.responsibilities,
+    capabilities: result.data.capabilities,
+    priorities: result.data.priorities,
+    model: result.model
   };
 }
 
@@ -415,83 +391,78 @@ export async function generateMatchAnalysisDraft(input: {
   ].join("\n");
   const generationBatch = `${new Date().toISOString()}-${Math.random().toString(36).slice(2, 8)}`;
 
-  let result: Awaited<ReturnType<typeof generateTextRobust>>;
+  const result = await generateStructuredJson({
+    system:
+      "你是一个求职匹配分析助手。你要基于项目卡片和 JD 能力摘要，输出结构化匹配分析草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
+    prompt: `请基于下面信息生成一版新的 JD 匹配分析草稿。\n\n本次生成批次：${generationBatch}\n请不要照搬上一版表达，优先换一个分析角度、换一组措辞和排序，但必须保持事实真实，不要编造项目事实。\n\n项目事实：\n${projectFactDigest}\n\nJD 职责重点：${input.capabilitySummary.responsibilities.join("；")}\nJD 能力关键词：${input.capabilitySummary.capabilities.join("；")}\nJD 优先级：${input.capabilitySummary.priorities.map((item) => `${item.label}(${item.level})`).join("；")}\n\n输出要求：\n1. 只输出合法 JSON，不要输出 Markdown，不要输出代码块，不要输出解释性前后缀。\n2. 顶层 JSON 必须包含且优先只包含这 4 个字段：{"matchedPoints":[],"gapPoints":[],"suggestionPoints":[],"summary":""}。\n3. matchedPoints、gapPoints、suggestionPoints 每个数组必须恰好 3 条，避免输出过长导致 JSON 被截断。\n4. 数组里的每一项可以是字符串，也可以是对象；更推荐对象格式：{"point":"一句明确结论","evidence":"来自项目事实或 JD 要求的具体证据"}。\n5. 如果使用对象格式，每个 point 控制在 45 个汉字以内，每个 evidence 控制在 70 个汉字以内；不要写长段落。\n6. matchedPoints 写"项目与 JD 的强匹配点"，每条说明匹配了 JD 的哪个职责、能力或优先级，并引用项目中的具体动作、模块、结果或决策。\n7. gapPoints 写"当前表达或证据上的缺口"，优先写表达缺口、证据缺口、量化缺口，不要简单判断用户能力不足。\n8. suggestionPoints 写"下一步可执行建议"，必须能直接指导简历改写或面试表达，每条建议要具体到怎么改、补什么证据、强化哪个角度。\n9. summary 必须是 2 到 3 句中文总结，说明整体匹配度、最值得主打的亮点、最需要补强的短板。\n10. 不要使用空数组，不要返回 null，不要把 JSON 字段名翻译成中文。\n11. 使用简体中文，表达具体、克制、可信，不要空泛套话。`,
+    temperature: 0.8,
+    maxOutputTokens: 3000,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as {
+        matchedPoints?: unknown;
+        gapPoints?: unknown;
+        suggestionPoints?: unknown;
+        summary?: unknown;
+        strengths?: unknown;
+        risks?: unknown;
+        weaknesses?: unknown;
+        recommendations?: unknown;
+        nextSteps?: unknown;
+      };
+      const matched = normalizeStringArray(record.matchedPoints);
+      const gaps = normalizeStringArray(record.gapPoints);
+      const suggestions = normalizeStringArray(record.suggestionPoints);
+      const aliasMatched = normalizeStringArray(record.strengths);
+      const aliasGaps = normalizeStringArray(record.risks ?? record.weaknesses);
+      const aliasSuggestions = normalizeStringArray(record.recommendations ?? record.nextSteps);
 
-  try {
-    result = await generateTextRobust({
-      system:
-        "你是一个求职匹配分析助手。你要基于项目卡片和 JD 能力摘要，输出结构化匹配分析草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
-      prompt: `请基于下面信息生成一版新的 JD 匹配分析草稿。\n\n本次生成批次：${generationBatch}\n请不要照搬上一版表达，优先换一个分析角度、换一组措辞和排序，但必须保持事实真实，不要编造项目事实。\n\n项目事实：\n${projectFactDigest}\n\nJD 职责重点：${input.capabilitySummary.responsibilities.join("；")}\nJD 能力关键词：${input.capabilitySummary.capabilities.join("；")}\nJD 优先级：${input.capabilitySummary.priorities.map((item) => `${item.label}(${item.level})`).join("；")}\n\n输出要求：\n1. 只输出合法 JSON，不要输出 Markdown，不要输出代码块，不要输出解释性前后缀。\n2. 顶层 JSON 必须包含且优先只包含这 4 个字段：{"matchedPoints":[],"gapPoints":[],"suggestionPoints":[],"summary":""}。\n3. matchedPoints、gapPoints、suggestionPoints 每个数组必须恰好 3 条，避免输出过长导致 JSON 被截断。\n4. 数组里的每一项可以是字符串，也可以是对象；更推荐对象格式：{"point":"一句明确结论","evidence":"来自项目事实或 JD 要求的具体证据"}。\n5. 如果使用对象格式，每个 point 控制在 45 个汉字以内，每个 evidence 控制在 70 个汉字以内；不要写长段落。\n6. matchedPoints 写"项目与 JD 的强匹配点"，每条说明匹配了 JD 的哪个职责、能力或优先级，并引用项目中的具体动作、模块、结果或决策。\n7. gapPoints 写"当前表达或证据上的缺口"，优先写表达缺口、证据缺口、量化缺口，不要简单判断用户能力不足。\n8. suggestionPoints 写"下一步可执行建议"，必须能直接指导简历改写或面试表达，每条建议要具体到怎么改、补什么证据、强化哪个角度。\n9. summary 必须是 2 到 3 句中文总结，说明整体匹配度、最值得主打的亮点、最需要补强的短板。\n10. 不要使用空数组，不要返回 null，不要把 JSON 字段名翻译成中文。\n11. 使用简体中文，表达具体、克制、可信，不要空泛套话。`,
-      temperature: 0.8,
-      maxOutputTokens: 2600
-    });
-  } catch (error) {
-    console.error("generateMatchAnalysisDraft API call failed:", error);
-    throw new Error(`匹配分析 API 调用失败：${error instanceof Error ? error.message : String(error)}`);
-  }
+      return (
+        (matched.length > 0 || aliasMatched.length > 0) &&
+        (gaps.length > 0 || aliasGaps.length > 0) &&
+        (suggestions.length > 0 || aliasSuggestions.length > 0) &&
+        typeof record.summary === "string" &&
+        record.summary.trim().length > 0
+      );
+    },
+    parse: (parsed) => {
+      const record = parsed as {
+        matchedPoints?: unknown;
+        gapPoints?: unknown;
+        suggestionPoints?: unknown;
+        summary?: unknown;
+        strengths?: unknown;
+        risks?: unknown;
+        weaknesses?: unknown;
+        recommendations?: unknown;
+        nextSteps?: unknown;
+      };
+      const matchedPoints = normalizeStringArray(record.matchedPoints);
+      const gapPoints = normalizeStringArray(record.gapPoints);
+      const suggestionPoints = normalizeStringArray(record.suggestionPoints);
+      const finalMatchedPoints = matchedPoints.length ? matchedPoints : normalizeStringArray(record.strengths);
+      const finalGapPoints = gapPoints.length ? gapPoints : normalizeStringArray(record.risks ?? record.weaknesses);
+      const finalSuggestionPoints = suggestionPoints.length
+        ? suggestionPoints
+        : normalizeStringArray(record.recommendations ?? record.nextSteps);
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("匹配分析 API 返回空内容：模型没有返回可解析文本。");
-  }
-
-  let parsed: {
-    matchedPoints?: unknown;
-    gapPoints?: unknown;
-    suggestionPoints?: unknown;
-    summary?: unknown;
-    strengths?: unknown;
-    risks?: unknown;
-    weaknesses?: unknown;
-    recommendations?: unknown;
-    nextSteps?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as typeof parsed;
-  } catch {
-    throw new Error(`匹配分析 API 返回 JSON 解析失败：返回内容前 300 字为「${normalizedText.slice(0, 300)}」`);
-  }
-
-  const matchedPoints = normalizeStringArray(parsed.matchedPoints);
-  const gapPoints = normalizeStringArray(parsed.gapPoints);
-  const suggestionPoints = normalizeStringArray(parsed.suggestionPoints);
-  const aliasMatchedPoints = normalizeStringArray(parsed.strengths);
-  const aliasGapPoints = normalizeStringArray(parsed.risks ?? parsed.weaknesses);
-  const aliasSuggestionPoints = normalizeStringArray(parsed.recommendations ?? parsed.nextSteps);
-  const finalMatchedPoints = matchedPoints.length ? matchedPoints : aliasMatchedPoints;
-  const finalGapPoints = gapPoints.length ? gapPoints : aliasGapPoints;
-  const finalSuggestionPoints = suggestionPoints.length ? suggestionPoints : aliasSuggestionPoints;
-  const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
-
-  const missingFields = [
-    finalMatchedPoints.length ? "" : "matchedPoints/strengths",
-    finalGapPoints.length ? "" : "gapPoints/risks/weaknesses",
-    finalSuggestionPoints.length ? "" : "suggestionPoints/recommendations/nextSteps",
-    summary ? "" : "summary"
-  ].filter(Boolean);
-
-  if (missingFields.length > 0) {
-    throw new Error(`匹配分析 API 返回字段缺失或为空：${missingFields.join("、")}。返回 JSON 为：${JSON.stringify(parsed).slice(0, 500)}`);
-  }
-
-  const shortGroups = [
-    finalMatchedPoints.length < 3 ? `matchedPoints 只有 ${finalMatchedPoints.length} 条` : "",
-    finalGapPoints.length < 3 ? `gapPoints 只有 ${finalGapPoints.length} 条` : "",
-    finalSuggestionPoints.length < 3 ? `suggestionPoints 只有 ${finalSuggestionPoints.length} 条` : ""
-  ].filter(Boolean);
-
-  if (shortGroups.length > 0) {
-    throw new Error(`匹配分析 API 返回条数不足：${shortGroups.join("；")}。每类至少需要 3 条。返回 JSON 为：${JSON.stringify(parsed).slice(0, 500)}`);
-  }
+      return {
+        matchedPoints: finalMatchedPoints,
+        gapPoints: finalGapPoints,
+        suggestionPoints: finalSuggestionPoints,
+        summary: extractString(record.summary)
+      };
+    }
+  });
 
   return {
-    matchedPoints: finalMatchedPoints,
-    gapPoints: finalGapPoints,
-    suggestionPoints: finalSuggestionPoints,
-    summary,
-    model: result.usedModel
+    matchedPoints: result.data.matchedPoints,
+    gapPoints: result.data.gapPoints,
+    suggestionPoints: result.data.suggestionPoints,
+    summary: result.data.summary,
+    model: result.model
   };
 }
 
@@ -542,50 +513,33 @@ export async function generateResumeRewriteDraft(input: {
     "jd-focused": "优先使用更贴当前目标岗位的表达方式，把最相关的经历放到前面。"
   } as const;
 
-  const result = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个简历改写助手。你要基于已确认项目事实和岗位匹配分析，生成一版更贴合目标岗位的简历项目描述。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成简历改写草稿。\n\n改写策略：${modeInstructions[input.rewriteMode]}\n\n已有简历内容：${input.resumeText}\n\n项目卡片标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n说人话版匹配解释：${input.matchAnalysis.plainExplanations?.matchedPoints ?? ""}\n说人话版差距解释：${input.matchAnalysis.plainExplanations?.gapPoints ?? ""}\n说人话版建议解释：${input.matchAnalysis.plainExplanations?.suggestionPoints ?? ""}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"rewrite":"...","reasoning":"...","highlights":[...]}。\n3. rewrite 必须是一段适合放进简历项目描述里的文本，优先引用项目中的具体动作、模块、协作方式和结果，不要只堆抽象能力词。\n4. rewrite 要优先突出与目标岗位最相关的职责、动作和结果，但不能编造事实。\n5. reasoning 用 1 到 3 句说明这版改写为什么更贴岗位。\n6. highlights 输出 2 到 4 条，说明相较原文主要增强了哪些重点。\n7. 使用简体中文，保持简历表达风格，不要写成分析报告。`,
-    maxOutputTokens: 1000
+    maxOutputTokens: 5000,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { rewrite?: unknown };
+      return typeof record.rewrite === "string" && record.rewrite.trim().length > 0;
+    },
+    parse: (parsed) => {
+      const record = parsed as { rewrite?: unknown; reasoning?: unknown; highlights?: unknown };
+      return {
+        rewrite: extractString(record.rewrite),
+        reasoning: extractString(record.reasoning),
+        highlights: extractStringArray(record.highlights)
+      };
+    }
   });
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的简历改写草稿，请稍后再试。");
-  }
-
-  let parsed: {
-    rewrite?: unknown;
-    reasoning?: unknown;
-    highlights?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as {
-      rewrite?: unknown;
-      reasoning?: unknown;
-      highlights?: unknown;
-    };
-  } catch {
-    throw new Error("模型返回内容无法解析为简历改写草稿，请重试或更换模型。");
-  }
-
-  const rewrite = typeof parsed.rewrite === "string" ? parsed.rewrite.trim() : "";
-  const reasoning = typeof parsed.reasoning === "string" ? parsed.reasoning.trim() : "";
-  const highlights = Array.isArray(parsed.highlights)
-    ? parsed.highlights.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
-
-  if (!rewrite) {
-    throw new Error("模型没有生成有效的简历改写草稿，请稍后再试。");
-  }
-
   return {
-    rewrite,
-    reasoning,
-    highlights,
-    model: result.usedModel
+    rewrite: result.data.rewrite,
+    reasoning: result.data.reasoning,
+    highlights: result.data.highlights,
+    model: result.model
   };
 }
 
@@ -606,44 +560,31 @@ export async function generateResumeFragmentRewrite(input: {
     summary: string;
   };
 }) {
-  const result = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个简历片段改写助手。你要在保留原始事实的前提下，只重写用户选中的那一段文本。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请只重写用户选中的简历片段。\n\n改写策略：${input.rewriteMode}\n\n整份简历上下文：${input.fullResumeText}\n\n用户选中的原文片段：${input.selectedText}\n\n项目卡片标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"rewrite":"...","reasoning":"..."}。\n3. rewrite 只能针对“用户选中的原文片段”进行重写，不要重写整份简历。\n4. rewrite 要结合整份简历上下文，避免前后文风格完全断裂。\n5. 保持事实真实，不要编造。\n6. 使用简体中文，保持简历项目描述语气。`,
-    maxOutputTokens: 700
+    maxOutputTokens: 2000,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { rewrite?: unknown };
+      return typeof record.rewrite === "string" && record.rewrite.trim().length > 0;
+    },
+    parse: (parsed) => {
+      const record = parsed as { rewrite?: unknown; reasoning?: unknown };
+      return {
+        rewrite: extractString(record.rewrite),
+        reasoning: extractString(record.reasoning)
+      };
+    }
   });
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的片段改写结果，请稍后再试。");
-  }
-
-  let parsed: {
-    rewrite?: unknown;
-    reasoning?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as {
-      rewrite?: unknown;
-      reasoning?: unknown;
-    };
-  } catch {
-    throw new Error("模型返回内容无法解析为片段改写结果，请重试或更换模型。");
-  }
-
-  const rewrite = typeof parsed.rewrite === "string" ? parsed.rewrite.trim() : "";
-  const reasoning = typeof parsed.reasoning === "string" ? parsed.reasoning.trim() : "";
-
-  if (!rewrite) {
-    throw new Error("模型没有生成有效的片段改写结果，请稍后再试。");
-  }
-
   return {
-    rewrite,
-    reasoning,
-    model: result.usedModel
+    rewrite: result.data.rewrite,
+    reasoning: result.data.reasoning,
+    model: result.model
   };
 }
 
@@ -667,46 +608,31 @@ async function generateInterviewScript(input: {
       ? "输出一段更短、更适合开场介绍的口语化讲稿。"
       : "输出一段更完整、更适合 3 分钟展开讲述的口语化讲稿。";
 
-  const result = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个面试表达助手。你要把项目事实和岗位匹配重点转成口语化项目讲稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成项目讲稿。\n\n时长要求：${durationInstruction}\n\n项目标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"script":"...","highlights":[...]}。\n3. script 必须是口语化表达，不要写成简历 bullet，也不要写成分析报告。\n4. highlights 输出 2 到 4 条，说明这版讲稿重点抓了什么。\n5. 使用简体中文。`,
-    maxOutputTokens: input.duration === "1-minute" ? 900 : 1500
+    maxOutputTokens: input.duration === "1-minute" ? 2000 : 3000,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { script?: unknown };
+      return typeof record.script === "string" && record.script.trim().length > 0;
+    },
+    parse: (parsed) => {
+      const record = parsed as { script?: unknown; highlights?: unknown };
+      return {
+        script: extractString(record.script),
+        highlights: extractStringArray(record.highlights)
+      };
+    }
   });
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的讲稿结果，请稍后再试。");
-  }
-
-  let parsed: {
-    script?: unknown;
-    highlights?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as {
-      script?: unknown;
-      highlights?: unknown;
-    };
-  } catch {
-    throw new Error("模型返回内容无法解析为讲稿结果，请重试或更换模型。");
-  }
-
-  const script = typeof parsed.script === "string" ? parsed.script.trim() : "";
-  const highlights = Array.isArray(parsed.highlights)
-    ? parsed.highlights.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
-
-  if (!script) {
-    throw new Error("模型没有生成有效的讲稿结果，请稍后再试。");
-  }
-
   return {
-    script,
-    highlights,
-    model: result.usedModel
+    script: result.data.script,
+    highlights: result.data.highlights,
+    model: result.model
   };
 }
 
@@ -758,41 +684,28 @@ export async function generateInterviewQuestionsList(input: {
     summary: string;
   };
 }) {
-  const result = await generateTextRobust({
+  const result = await generateStructuredJson({
     system:
       "你是一个面试追问助手。你要基于项目事实和岗位匹配重点，输出一组高频追问问题。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成面试高频追问清单。\n\n项目标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"questions":[...]}。\n3. 输出 6 到 10 条中文问题。\n4. 问题要覆盖背景真实性、职责边界、关键决策、结果指标、岗位贴合点等方向。`,
-    maxOutputTokens: 900
+    maxOutputTokens: 2500,
+    validate: (parsed) => {
+      if (typeof parsed !== "object" || parsed === null) {
+        return false;
+      }
+      const record = parsed as { questions?: unknown };
+      return Array.isArray(record.questions) && record.questions.length > 0;
+    },
+    parse: (parsed) => {
+      const record = parsed as { questions?: unknown };
+      return {
+        questions: extractStringArray(record.questions)
+      };
+    }
   });
 
-  const normalizedText = normalizeJsonText(result.text);
-
-  if (!normalizedText) {
-    throw new Error("模型没有返回可解析的追问清单，请稍后再试。");
-  }
-
-  let parsed: {
-    questions?: unknown;
-  };
-
-  try {
-    parsed = JSON.parse(normalizedText) as {
-      questions?: unknown;
-    };
-  } catch {
-    throw new Error("模型返回内容无法解析为追问清单，请重试或更换模型。");
-  }
-
-  const questions = Array.isArray(parsed.questions)
-    ? parsed.questions.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
-    : [];
-
-  if (!questions.length) {
-    throw new Error("模型没有生成有效的追问清单，请稍后再试。");
-  }
-
   return {
-    questions,
-    model: result.usedModel
+    questions: result.data.questions,
+    model: result.model
   };
 }
