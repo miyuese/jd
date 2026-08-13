@@ -1,4 +1,4 @@
-import { generateText } from "ai";
+import { generateText, streamText } from "ai";
 import type { LanguageModel } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { getActiveAiProviderConfig } from "@/lib/ai-config-data";
@@ -506,17 +506,11 @@ export async function generateResumeRewriteDraft(input: {
     };
   };
 }) {
-  const modeInstructions = {
-    balanced: "在职责、动作、结果之间保持平衡，整体像一段成熟的项目经历描述。",
-    "result-focused": "优先强化结果、影响和业务价值，让读者更快看到项目产出。",
-    "responsibility-focused": "优先强化你具体负责了什么、推进了什么、做过哪些关键动作。",
-    "jd-focused": "优先使用更贴当前目标岗位的表达方式，把最相关的经历放到前面。"
-  } as const;
+  const { system, prompt } = buildResumeRewritePrompt(input);
 
   const result = await generateStructuredJson({
-    system:
-      "你是一个简历改写助手。你要基于已确认项目事实和岗位匹配分析，生成一版更贴合目标岗位的简历项目描述。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
-    prompt: `请基于下面信息生成简历改写草稿。\n\n改写策略：${modeInstructions[input.rewriteMode]}\n\n已有简历内容：${input.resumeText}\n\n项目卡片标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n说人话版匹配解释：${input.matchAnalysis.plainExplanations?.matchedPoints ?? ""}\n说人话版差距解释：${input.matchAnalysis.plainExplanations?.gapPoints ?? ""}\n说人话版建议解释：${input.matchAnalysis.plainExplanations?.suggestionPoints ?? ""}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"rewrite":"...","reasoning":"...","highlights":[...]}。\n3. rewrite 必须是一段适合放进简历项目描述里的文本，优先引用项目中的具体动作、模块、协作方式和结果，不要只堆抽象能力词。\n4. rewrite 要优先突出与目标岗位最相关的职责、动作和结果，但不能编造事实。\n5. reasoning 用 1 到 3 句说明这版改写为什么更贴岗位。\n6. highlights 输出 2 到 4 条，说明相较原文主要增强了哪些重点。\n7. 使用简体中文，保持简历表达风格，不要写成分析报告。`,
+    system,
+    prompt,
     maxOutputTokens: 5000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
@@ -541,6 +535,95 @@ export async function generateResumeRewriteDraft(input: {
     highlights: result.data.highlights,
     model: result.model
   };
+}
+
+/**
+ * 构造简历改写的系统提示词与用户提示词（流式与非流式共用）。
+ * 提示词全文保留，不做截断——通过流式输出规避 Vercel 长连接超时。
+ */
+export function buildResumeRewritePrompt(input: {
+  resumeText: string;
+  rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused";
+  projectCard: {
+    title: string;
+    background: string;
+    responsibility: string;
+    result: string;
+  };
+  matchAnalysis: {
+    matchedPoints: string[];
+    gapPoints: string[];
+    suggestionPoints: string[];
+    summary: string;
+    plainExplanations?: {
+      matchedPoints: string;
+      gapPoints: string;
+      suggestionPoints: string;
+    };
+  };
+}): { system: string; prompt: string } {
+  const modeInstructions = {
+    balanced: "在职责、动作、结果之间保持平衡，整体像一段成熟的项目经历描述。",
+    "result-focused": "优先强化结果、影响和业务价值，让读者更快看到项目产出。",
+    "responsibility-focused": "优先强化你具体负责了什么、推进了什么、做过哪些关键动作。",
+    "jd-focused": "优先使用更贴当前目标岗位的表达方式，把最相关的经历放到前面。"
+  } as const;
+
+  return {
+    system:
+      "你是一个简历改写助手。你要基于已确认项目事实和岗位匹配分析，生成一版更贴合目标岗位的简历项目描述。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
+    prompt: `请基于下面信息生成简历改写草稿。\n\n改写策略：${modeInstructions[input.rewriteMode]}\n\n已有简历内容：${input.resumeText}\n\n项目卡片标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n说人话版匹配解释：${input.matchAnalysis.plainExplanations?.matchedPoints ?? ""}\n说人话版差距解释：${input.matchAnalysis.plainExplanations?.gapPoints ?? ""}\n说人话版建议解释：${input.matchAnalysis.plainExplanations?.suggestionPoints ?? ""}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"rewrite":"...","reasoning":"...","highlights":[...]}。\n3. rewrite 必须是一段适合放进简历项目描述里的文本，优先引用项目中的具体动作、模块、协作方式和结果，不要只堆抽象能力词。\n4. rewrite 要优先突出与目标岗位最相关的职责、动作和结果，但不能编造事实。\n5. reasoning 用 1 到 3 句说明这版改写为什么更贴岗位。\n6. highlights 输出 2 到 4 条，说明相较原文主要增强了哪些重点。\n7. 使用简体中文，保持简历表达风格，不要写成分析报告。`
+  };
+}
+
+/**
+ * 流式简历改写：用 streamText 逐 token 输出，规避 Vercel 长请求超时。
+ * 返回 textStream 与使用的模型名；模型不可用时自动降级到备用模型。
+ */
+export async function streamResumeRewriteDraft(input: {
+  resumeText: string;
+  rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused";
+  projectCard: {
+    title: string;
+    background: string;
+    responsibility: string;
+    result: string;
+  };
+  matchAnalysis: {
+    matchedPoints: string[];
+    gapPoints: string[];
+    suggestionPoints: string[];
+    summary: string;
+    plainExplanations?: {
+      matchedPoints: string;
+      gapPoints: string;
+      suggestionPoints: string;
+    };
+  };
+}): Promise<{ textStream: AsyncIterable<string>; model: string }> {
+  const { system, prompt } = buildResumeRewritePrompt(input);
+  const models = await getConfigModels();
+
+  let lastError: unknown = null;
+
+  for (const { model, name } of models) {
+    try {
+      const result = streamText({
+        system,
+        prompt,
+        maxOutputTokens: 5000,
+        model
+      });
+      return { textStream: result.textStream, model: name };
+    } catch (error) {
+      lastError = error;
+      console.warn(`[AI stream] 模型 ${name} 流式创建失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("所有 AI 模型均调用失败，请检查模型配置或稍后再试。");
 }
 
 export async function generateResumeFragmentRewrite(input: {

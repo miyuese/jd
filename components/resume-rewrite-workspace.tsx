@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   generateResumeFragmentRewriteAction,
-  generateResumeRewriteAction,
   saveResumeRewriteContextAction
 } from "@/app/resume-rewrite/actions";
 import { EmptyState } from "@/components/empty-state";
@@ -189,7 +188,8 @@ export function ResumeRewriteWorkspace({
     }
     router.push(`/resume-rewrite?projectId=${selectedProjectId}&jdId=${jdId}`);
   };
-  const [isGenerating, startGenerating] = useTransition();
+  const [isGenerating, setGenerating] = useState(false);
+  const [streamPreview, setStreamPreview] = useState("");
   const [isGeneratingFragment, startGeneratingFragment] = useTransition();
   const [isSavingContext, startSavingContext] = useTransition();
   const [resumeContext, setResumeContext] = useState(initialResumeText);
@@ -246,28 +246,136 @@ export function ResumeRewriteWorkspace({
     router.push(`/resume-rewrite?projectId=${projectId}`);
   };
 
-  const handleGenerateRewrite = () => {
+  const handleGenerateRewrite = async () => {
     if (!selectedProjectId) {
       return;
     }
 
     setRewriteError("");
+    setRewriteMessage("正在生成改写草稿...");
+    setStreamPreview("");
+    setGenerating(true);
 
-    startGenerating(async () => {
-      const result = await generateResumeRewriteAction(selectedProjectId, initialResumeText, rewriteMode, selectedJdId ?? undefined);
+    try {
+      const response = await fetch("/api/resume-rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProjectId,
+          resumeText: resumeContext,
+          rewriteMode,
+          jdId: selectedJdId ?? undefined
+        })
+      });
 
-      if (!result.success) {
-        setRewriteError(result.message);
+      if (!response.ok) {
+        let errorMessage = `生成失败（${response.status}），请稍后再试。`;
+        try {
+          const errorBody = (await response.json()) as { error?: string };
+          if (errorBody.error) {
+            errorMessage = errorBody.error;
+          }
+        } catch {
+          // 保持默认错误文案
+        }
+        setRewriteError(errorMessage);
+        setGenerating(false);
         return;
       }
 
-      setRewriteDraft(result.rewrite ?? "");
-      saveDraft(draftRewriteKey(selectedProjectId), result.rewrite ?? "");
-      setRewriteReasoning(result.reasoning ?? "");
-      setRewriteHighlights(result.highlights ?? []);
-      setResponseModel(result.model ?? "");
-      setRewriteMessage(result.message);
-    });
+      const contentType = response.headers.get("content-type") ?? "";
+
+      // 非流式（正常应走 SSE）时按 JSON 处理
+      if (!contentType.includes("text/event-stream")) {
+        const data = (await response.json()) as {
+          rewrite?: string;
+          reasoning?: string;
+          highlights?: string[];
+          model?: string;
+          message?: string;
+        };
+        setRewriteDraft(data.rewrite ?? "");
+        saveDraft(draftRewriteKey(selectedProjectId), data.rewrite ?? "");
+        setRewriteReasoning(data.reasoning ?? "");
+        setRewriteHighlights(data.highlights ?? []);
+        setResponseModel(data.model ?? "");
+        setRewriteMessage(data.message ?? "简历改写草稿已生成并保存为输出版本。");
+        setGenerating(false);
+        return;
+      }
+
+      // 流式读取 SSE
+      const reader = response.body?.getReader();
+      if (!reader) {
+        setRewriteError("无法读取生成结果，请稍后再试。");
+        setGenerating(false);
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const handleEvent = (event: { type: string; text?: string; rewrite?: string; reasoning?: string; highlights?: string[]; model?: string; message?: string; error?: string }) => {
+        if (event.type === "chunk" && event.text) {
+          setStreamPreview((prev) => prev + event.text);
+          return;
+        }
+
+        if (event.type === "done") {
+          setRewriteDraft(event.rewrite ?? "");
+          saveDraft(draftRewriteKey(selectedProjectId), event.rewrite ?? "");
+          setRewriteReasoning(event.reasoning ?? "");
+          setRewriteHighlights(event.highlights ?? []);
+          setResponseModel(event.model ?? "");
+          setRewriteMessage(event.message ?? "简历改写草稿已生成并保存为输出版本。");
+          setGenerating(false);
+          return;
+        }
+
+        if (event.type === "error") {
+          setRewriteError(event.error ?? "生成失败，请稍后再试。");
+          setGenerating(false);
+          return;
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+
+          if (!trimmed.startsWith("data: ")) {
+            continue;
+          }
+
+          const payload = trimmed.slice("data: ".length);
+
+          try {
+            handleEvent(JSON.parse(payload) as Parameters<typeof handleEvent>[0]);
+          } catch {
+            // 跳过无法解析的事件
+          }
+        }
+      }
+
+      // 流结束但没收到 done/error（异常断流）
+      setGenerating(false);
+      if (!rewriteDraft) {
+        setRewriteError("生成中断，可能是网络波动或超时，请重试。");
+      }
+    } catch (err) {
+      setGenerating(false);
+      setRewriteError(err instanceof Error ? err.message : "生成简历改写失败，请稍后再试。");
+    }
   };
 
   const handleApplyRewrite = () => {
@@ -545,6 +653,12 @@ export function ResumeRewriteWorkspace({
 
           {rewriteError ? <ErrorDisplay error={rewriteError} compact /> : null}
           {isGenerating ? <GeneratingIndicator label="AI 正在生成简历改写稿" /> : null}
+          {isGenerating && streamPreview ? (
+            <div className="mt-4 rounded-[20px] border border-sky-100 bg-sky-50/40 p-4">
+              <div className="text-xs font-medium text-sky-700">实时生成预览</div>
+              <p className="mt-2 whitespace-pre-wrap font-mono text-xs leading-6 text-slate-600">{streamPreview}</p>
+            </div>
+          ) : null}
           <p className="mt-4 text-sm leading-7 text-slate-600">{rewriteMessage}</p>
           {responseModel ? <div className="mt-3 text-xs text-slate-500">本轮生成模型：{responseModel}</div> : null}
 
