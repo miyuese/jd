@@ -41,6 +41,7 @@ type VersionRow = {
   sourceResumeMaterialId: string | null;
   sourceProjectCardId: string | null;
   sourceMatchAnalysisId: string | null;
+  jdRecordId: string | null;
   createdAt: string | Date;
 };
 
@@ -53,6 +54,7 @@ export type VersionItem = {
   sourceResumeMaterialId: string | null;
   sourceProjectCardId: string | null;
   sourceMatchAnalysisId: string | null;
+  jdRecordId: string | null;
   createdAt: Date;
 };
 
@@ -66,16 +68,45 @@ function mapVersion(row: VersionRow): VersionItem {
     sourceResumeMaterialId: row.sourceResumeMaterialId,
     sourceProjectCardId: row.sourceProjectCardId,
     sourceMatchAnalysisId: row.sourceMatchAnalysisId,
+    jdRecordId: row.jdRecordId,
     createdAt: new Date(row.createdAt)
   };
 }
 
-export async function listAllVersions(projectId: string, clerkUserId: string): Promise<VersionItem[]> {
+/** 查询版本：支持按项目维度（旧）或交叉点维度（卡片 × JD，新）。 */
+export async function listAllVersions(
+  projectId: string | null,
+  clerkUserId: string,
+  cross?: { projectCardId?: string | null; jdRecordId?: string | null }
+): Promise<VersionItem[]> {
   const sql = getSql();
+
+  // 交叉点模式：按 卡片 + JD 过滤（来源维度，不依赖 projectId）
+  if (cross?.projectCardId && cross?.jdRecordId) {
+    const rows = (await sql.query(
+      `
+        SELECT "id", "projectId", "type", "title", "content",
+               "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "jdRecordId", "createdAt"
+        FROM "VersionRecord"
+        WHERE "clerkUserId" = $1
+          AND "sourceProjectCardId" = $2
+          AND "jdRecordId" = $3
+        ORDER BY "createdAt" DESC
+      `,
+      [clerkUserId, cross.projectCardId, cross.jdRecordId]
+    )) as VersionRow[];
+
+    return rows.map(mapVersion);
+  }
+
+  if (!projectId) {
+    return [];
+  }
+
   const rows = (await sql.query(
     `
       SELECT "id", "projectId", "type", "title", "content",
-             "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "createdAt"
+             "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "jdRecordId", "createdAt"
       FROM "VersionRecord"
       WHERE "projectId" = $1 AND "clerkUserId" = $2
       ORDER BY "createdAt" DESC
@@ -91,7 +122,7 @@ export async function getVersionById(versionId: string, clerkUserId: string): Pr
   const rows = (await sql.query(
     `
       SELECT "id", "projectId", "type", "title", "content",
-             "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "createdAt"
+             "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "jdRecordId", "createdAt"
       FROM "VersionRecord"
       WHERE "id" = $1 AND "clerkUserId" = $2
       LIMIT 1

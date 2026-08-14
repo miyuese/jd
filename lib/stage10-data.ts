@@ -55,33 +55,41 @@ export async function createInterviewOutputVersion(
   title: string,
   content: unknown,
   sourceProjectCardId: string | null,
-  sourceMatchAnalysisId: string | null
+  sourceMatchAnalysisId: string | null,
+  jdRecordId?: string | null
 ) {
   const sql = getSql();
   const rows = (await sql.query(
     `
       INSERT INTO "VersionRecord" (
-        "id", "projectId", "clerkUserId", "type", "title", "content", "sourceProjectCardId", "sourceMatchAnalysisId", "createdAt"
+        "id", "projectId", "clerkUserId", "type", "title", "content", "sourceProjectCardId", "sourceMatchAnalysisId", "jdRecordId", "createdAt"
       )
-      VALUES ($1, $2, $3, 'OUTPUT', $4, $5::jsonb, $6, $7, NOW())
+      VALUES ($1, $2, $3, 'OUTPUT', $4, $5::jsonb, $6, $7, $8, NOW())
       RETURNING "id", "title", "content", "createdAt"
     `,
-    [randomUUID(), projectId, clerkUserId, title, JSON.stringify(content), sourceProjectCardId, sourceMatchAnalysisId]
+    [randomUUID(), projectId, clerkUserId, title, JSON.stringify(content), sourceProjectCardId, sourceMatchAnalysisId, jdRecordId ?? null]
   )) as VersionRecordRow[];
 
   return mapVersion(rows[0]);
 }
 
-export async function listInterviewOutputVersions(projectId: string, clerkUserId: string) {
+export async function listInterviewOutputVersions(
+  projectId: string,
+  clerkUserId: string,
+  sourceProjectCardId?: string | null,
+  jdRecordId?: string | null
+) {
   const sql = getSql();
   const rows = (await sql.query(
     `
       SELECT "id", "title", "content", "createdAt"
       FROM "VersionRecord"
       WHERE "projectId" = $1 AND "clerkUserId" = $2 AND "type" = 'OUTPUT'
+        AND (($3::text IS NULL AND "sourceProjectCardId" IS NULL) OR "sourceProjectCardId" = $3)
+        AND (($4::text IS NULL AND "jdRecordId" IS NULL) OR "jdRecordId" = $4)
       ORDER BY "createdAt" DESC
     `,
-    [projectId, clerkUserId]
+    [projectId, clerkUserId, sourceProjectCardId ?? null, jdRecordId ?? null]
   )) as VersionRecordRow[];
 
   return rows.map(mapVersion);

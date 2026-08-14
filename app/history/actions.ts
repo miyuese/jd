@@ -50,9 +50,12 @@ export async function getProjectsWithVersionsAction(): Promise<ProjectWithVersio
   return listProjectsWithVersions(userId);
 }
 
-export async function getProjectVersionsAction(projectId: string): Promise<VersionItem[]> {
+export async function getProjectVersionsAction(
+  projectId: string,
+  cross?: { projectCardId?: string | null; jdRecordId?: string | null }
+): Promise<VersionItem[]> {
   const userId = requireClerkUserId();
-  return listAllVersions(projectId, userId);
+  return listAllVersions(projectId, userId, cross);
 }
 
 export async function getVersionDetailAction(versionId: string): Promise<VersionItem | null> {

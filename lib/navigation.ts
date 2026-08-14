@@ -24,7 +24,7 @@ export const navItems: NavItem[] = [
     href: "/workspace",
     label: "工作台",
     icon: LayoutDashboard,
-    description: "项目管理与概览"
+    description: "求职计划管理"
   },
   {
     href: "/memory",
@@ -40,15 +40,15 @@ export const navItems: NavItem[] = [
   },
   {
     href: "/project-materials",
-    label: "项目材料",
+    label: "项目经历",
     icon: FolderKanban,
-    description: "录入项目原始材料"
+    description: "录入项目原始素材"
   },
   {
-    href: "/project-card",
-    label: "项目卡片",
+    href: "/cards",
+    label: "我的卡片",
     icon: Layers,
-    description: "结构化项目确认"
+    description: "简历×经历的组合卡片库"
   },
   {
     href: "/jd-analysis",
@@ -86,7 +86,7 @@ export const navItems: NavItem[] = [
 export const navGroups: Array<{ label: string; items: NavItem[] }> = [
   { label: "Overview", items: [navItems[0]] },
   { label: "Materials", items: navItems.slice(1, 4) },
-  { label: "Process", items: navItems.slice(4, 6) },
-  { label: "Output", items: navItems.slice(6, 8) },
+  { label: "Process", items: [navItems[4]] },
+  { label: "Output", items: navItems.slice(5, 8) },
   { label: "System", items: navItems.slice(8, 10) }
 ];

@@ -45,8 +45,9 @@ type JdRecordRow = {
 
 type MatchAnalysisRow = {
   id: string;
-  projectId: string;
+  projectId: string | null;
   jdRecordId: string | null;
+  projectCardId: string | null;
   clerkUserId: string;
   status: string;
   matchedPoints: unknown;
@@ -109,6 +110,7 @@ function mapMatchAnalysis(row: MatchAnalysisRow) {
     id: row.id,
     projectId: row.projectId,
     jdRecordId: row.jdRecordId,
+    projectCardId: row.projectCardId,
     clerkUserId: row.clerkUserId,
     status: row.status,
     matchedPoints: matched.items,
@@ -229,8 +231,8 @@ export async function getLatestMatchAnalysis(projectId: string, clerkUserId: str
   return rows[0] ? mapMatchAnalysis(rows[0]) : null;
 }
 
-/** 按指定 JD 获取对应的匹配分析（多 JD 场景下每个 JD 拥有独立的匹配结果）。 */
-export async function getMatchAnalysisByJdRecord(jdRecordId: string, clerkUserId: string) {
+/** 按指定 JD 获取对应的匹配分析（多 JD 场景下每个 JD 拥有独立的匹配结果；可进一步限定卡片）。 */
+export async function getMatchAnalysisByJdRecord(jdRecordId: string, clerkUserId: string, projectCardId?: string | null) {
   if (!jdRecordId) {
     return null;
   }
@@ -238,13 +240,14 @@ export async function getMatchAnalysisByJdRecord(jdRecordId: string, clerkUserId
   const sql = getSql();
   const rows = (await sql.query(
     `
-      SELECT "id", "projectId", "jdRecordId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+      SELECT "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
       FROM "MatchAnalysis"
       WHERE "jdRecordId" = $1 AND "clerkUserId" = $2
+        AND (($3::text IS NULL AND "projectCardId" IS NULL) OR "projectCardId" = $3)
       ORDER BY "updatedAt" DESC
       LIMIT 1
     `,
-    [jdRecordId, clerkUserId]
+    [jdRecordId, clerkUserId, projectCardId ?? null]
   )) as MatchAnalysisRow[];
 
   return rows[0] ? mapMatchAnalysis(rows[0]) : null;
@@ -264,10 +267,11 @@ export async function saveGeneratedMatchAnalysis(
       suggestionPoints: string;
     };
     summary: string;
-  }
+  },
+  projectCardId?: string | null
 ) {
   const sql = getSql();
-  const existing = await getMatchAnalysisByJdRecord(jdRecordId, clerkUserId);
+  const existing = await getMatchAnalysisByJdRecord(jdRecordId, clerkUserId, projectCardId);
   const matchedPointsPayload = JSON.stringify({ items: values.matchedPoints, plainExplanation: values.plainExplanations.matchedPoints });
   const gapPointsPayload = JSON.stringify({ items: values.gapPoints, plainExplanation: values.plainExplanations.gapPoints });
   const suggestionPointsPayload = JSON.stringify({ items: values.suggestionPoints, plainExplanation: values.plainExplanations.suggestionPoints });
@@ -277,16 +281,17 @@ export async function saveGeneratedMatchAnalysis(
       `
         UPDATE "MatchAnalysis"
         SET "jdRecordId" = $1,
+            "projectCardId" = $2,
             "status" = 'PENDING_CONFIRMATION',
-            "matchedPoints" = $2::jsonb,
-            "gapPoints" = $3::jsonb,
-            "suggestionPoints" = $4::jsonb,
-            "summary" = $5,
+            "matchedPoints" = $3::jsonb,
+            "gapPoints" = $4::jsonb,
+            "suggestionPoints" = $5::jsonb,
+            "summary" = $6,
             "updatedAt" = NOW()
-        WHERE "id" = $6
-        RETURNING "id", "projectId", "jdRecordId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+        WHERE "id" = $7
+        RETURNING "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
       `,
-      [jdRecordId, matchedPointsPayload, gapPointsPayload, suggestionPointsPayload, values.summary, existing.id]
+      [jdRecordId, projectCardId ?? null, matchedPointsPayload, gapPointsPayload, suggestionPointsPayload, values.summary, existing.id]
     )) as MatchAnalysisRow[];
 
     return mapMatchAnalysis(rows[0]);
@@ -295,12 +300,12 @@ export async function saveGeneratedMatchAnalysis(
   const rows = (await sql.query(
     `
       INSERT INTO "MatchAnalysis" (
-        "id", "projectId", "jdRecordId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+        "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, 'PENDING_CONFIRMATION', $5::jsonb, $6::jsonb, $7::jsonb, $8, NOW(), NOW())
-      RETURNING "id", "projectId", "jdRecordId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+      VALUES ($1, $2, $3, $4, $5, 'PENDING_CONFIRMATION', $6::jsonb, $7::jsonb, $8::jsonb, $9, NOW(), NOW())
+      RETURNING "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
     `,
-    [randomUUID(), projectId, jdRecordId, clerkUserId, matchedPointsPayload, gapPointsPayload, suggestionPointsPayload, values.summary]
+    [randomUUID(), projectId, jdRecordId, projectCardId ?? null, clerkUserId, matchedPointsPayload, gapPointsPayload, suggestionPointsPayload, values.summary]
   )) as MatchAnalysisRow[];
 
   return mapMatchAnalysis(rows[0]);
@@ -346,7 +351,7 @@ export async function updateMatchAnalysis(
   return rows[0] ? mapMatchAnalysis(rows[0]) : null;
 }
 
-export async function createMatchAnalysisVersion(projectId: string, clerkUserId: string, analysis: ReturnType<typeof mapMatchAnalysis>) {
+export async function createMatchAnalysisVersion(projectId: string | null, clerkUserId: string, analysis: ReturnType<typeof mapMatchAnalysis>) {
   const sql = getSql();
   const title = `匹配分析版本 · ${new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
@@ -362,22 +367,49 @@ export async function createMatchAnalysisVersion(projectId: string, clerkUserId:
     status: analysis.status
   });
 
+  // 版本写入时带上交叉点维度：sourceMatchAnalysisId + sourceProjectCardId + jdRecordId
   const rows = (await sql.query(
     `
       INSERT INTO "VersionRecord" (
-        "id", "projectId", "clerkUserId", "type", "title", "content", "sourceMatchAnalysisId", "createdAt"
+        "id", "projectId", "clerkUserId", "type", "title", "content",
+        "sourceMatchAnalysisId", "sourceProjectCardId", "jdRecordId", "createdAt"
       )
-      VALUES ($1, $2, $3, 'MATCH_ANALYSIS', $4, $5::jsonb, $6, NOW())
+      VALUES ($1, $2, $3, 'MATCH_ANALYSIS', $4, $5::jsonb, $6, $7, $8, NOW())
       RETURNING "id", "title", "createdAt"
     `,
-    [randomUUID(), projectId, clerkUserId, title, content, analysis.id]
+    [randomUUID(), projectId, clerkUserId, title, content, analysis.id, analysis.projectCardId, analysis.jdRecordId]
   )) as VersionRecordRow[];
 
   return mapVersion(rows[0]);
 }
 
-export async function listMatchAnalysisVersions(projectId: string, clerkUserId: string) {
+/** 查询匹配分析版本：优先按交叉点（projectCardId + jdRecordId），否则按项目（兼容旧流程）。 */
+export async function listMatchAnalysisVersions(
+  projectId: string | null,
+  clerkUserId: string,
+  cross?: { projectCardId?: string | null; jdRecordId?: string | null }
+) {
   const sql = getSql();
+
+  if (cross?.projectCardId && cross?.jdRecordId) {
+    const rows = (await sql.query(
+      `
+        SELECT "id", "title", "createdAt"
+        FROM "VersionRecord"
+        WHERE "clerkUserId" = $1 AND "type" = 'MATCH_ANALYSIS'
+          AND "sourceProjectCardId" = $2 AND "jdRecordId" = $3
+        ORDER BY "createdAt" DESC
+      `,
+      [clerkUserId, cross.projectCardId, cross.jdRecordId]
+    )) as VersionRecordRow[];
+
+    return rows.map(mapVersion);
+  }
+
+  if (!projectId) {
+    return [];
+  }
+
   const rows = (await sql.query(
     `
       SELECT "id", "title", "createdAt"

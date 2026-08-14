@@ -11,6 +11,7 @@ import {
   getJdRecordById,
   getLatestJdRecord,
   getLatestMatchAnalysis,
+  getMatchAnalysisByJdRecord,
   saveGeneratedMatchAnalysis,
   saveJdRecord,
   updateJdCapabilitySummary,
@@ -116,7 +117,7 @@ export async function generateCapabilitySummaryAction(projectId: string, jdId?: 
   }
 }
 
-export async function generateMatchAnalysisAction(projectId: string, jdId?: string): Promise<ActionResult> {
+export async function generateMatchAnalysisAction(projectId: string, jdId?: string, projectCardId?: string): Promise<ActionResult> {
   let stage = "初始化";
 
   try {
@@ -126,7 +127,7 @@ export async function generateMatchAnalysisAction(projectId: string, jdId?: stri
     stage = "读取 JD 记录和项目卡片";
     const [jdRecord, projectCard] = await Promise.all([
       jdId ? getJdRecordById(jdId, userId) : getLatestJdRecord(projectId, userId),
-      getLatestProjectCard(projectId, userId)
+      projectCardId ? getProjectCardById(projectCardId, userId) : getLatestProjectCard(projectId, userId)
     ]);
 
     if (!projectCard) {
@@ -178,7 +179,7 @@ export async function generateMatchAnalysisAction(projectId: string, jdId?: stri
     const saved = await saveGeneratedMatchAnalysis(projectId, jdRecord.id, userId, {
       ...analysis,
       plainExplanations
-    });
+    }, projectCard.id);
 
     stage = "刷新 JD 分析页面缓存";
     revalidatePath("/jd-analysis");
@@ -187,7 +188,8 @@ export async function generateMatchAnalysisAction(projectId: string, jdId?: stri
       success: true,
       message: "匹配分析草稿已生成，可以继续确认表达重点。",
       savedAt: saved.updatedAt.toISOString(),
-      model: analysis.model
+      model: analysis.model,
+      data: { matchAnalysisId: saved.id }
     };
   } catch (error) {
     console.error("generateMatchAnalysisAction failed:", {
@@ -203,6 +205,13 @@ export async function generateMatchAnalysisAction(projectId: string, jdId?: stri
       message: `匹配分析失败（${stage}）：${message || "未知错误"}`
     };
   }
+}
+
+/** 按 id 查询用户的一张项目卡片（供交叉点选择用）。 */
+async function getProjectCardById(projectCardId: string, userId: string) {
+  const { listProjectCards } = await import("@/lib/stage7-data");
+  const cards = await listProjectCards(userId);
+  return cards.find((card) => card.id === projectCardId) ?? null;
 }
 
 export async function updateMatchAnalysisAction(values: z.infer<typeof updateMatchAnalysisSchema>): Promise<ActionResult> {
@@ -275,15 +284,21 @@ export async function updateMatchAnalysisAction(values: z.infer<typeof updateMat
   }
 }
 
-export async function saveMatchAnalysisVersionAction(projectId: string): Promise<ActionResult> {
+export async function saveMatchAnalysisVersionAction(
+  projectId: string,
+  jdId?: string,
+  cardId?: string
+): Promise<ActionResult> {
   let stage = "初始化";
 
   try {
     stage = "读取登录用户";
     const userId = requireClerkUserId();
 
-    stage = "读取最新匹配分析";
-    const analysis = await getLatestMatchAnalysis(projectId, userId);
+    stage = "读取当前匹配分析（优先按交叉点卡片×JD）";
+    const analysis = jdId
+      ? await getMatchAnalysisByJdRecord(jdId, userId, cardId)
+      : await getLatestMatchAnalysis(projectId, userId);
 
     if (!analysis) {
       return {

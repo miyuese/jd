@@ -122,10 +122,10 @@ export function NewProjectWorkspace() {
     <section className="page-card p-6 sm:p-8">
         <div className="mb-6 flex flex-col gap-3 border-b border-sky-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <span className="soft-chip">项目复盘</span>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">新建项目复盘任务</h2>
+            <span className="soft-chip">求职计划</span>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">新建求职计划</h2>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
-              填写项目基础信息，右侧会实时预览草稿。提交后项目将保存到你的工作台，之后可继续录入材料、完成 JD 分析和表达生成。
+              求职计划 = 一个岗位方向（例如「AI 产品经理求职」），用来装这个方向下的 JD、卡片和匹配产物。遇到 JD 时创建最自然，也可以先建一个打底。
             </p>
           </div>
           <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-sky-800">
@@ -137,13 +137,13 @@ export function NewProjectWorkspace() {
         <form className="space-y-5" onSubmit={form.handleSubmit(handleCreateProject)} noValidate>
           <div className="rounded-[24px] border border-sky-100 bg-slate-50/70 dark:bg-slate-800/50 p-5">
             <label className="block text-sm font-medium text-slate-800" htmlFor="projectName">
-              项目名称
+              求职计划名称
             </label>
-            <p className="mt-1 text-sm leading-6 text-slate-500">用一句话说明你要复盘的是哪个项目或经历。</p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">用一句话说明这个求职方向，例如「AI 产品经理求职」。</p>
             <input
               id="projectName"
               type="text"
-              placeholder="例如：AI 面试助手 MVP 从 0 到 1"
+              placeholder="例如：AI 产品经理求职"
               className="mt-3 w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 dark:text-slate-100 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
               {...form.register("projectName")}
             />
@@ -156,7 +156,7 @@ export function NewProjectWorkspace() {
             <label className="block text-sm font-medium text-slate-800" htmlFor="targetRole">
               目标岗位
             </label>
-            <p className="mt-1 text-sm leading-6 text-slate-500">填写这次复盘最想对齐的岗位方向，方便后续接 JD 分析。</p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">填写这个求职计划对应的岗位方向，方便后续接 JD 分析。</p>
             <input
               id="targetRole"
               type="text"
@@ -187,13 +187,13 @@ export function NewProjectWorkspace() {
           </div>
 
           <div className="flex flex-col gap-3 border-t border-sky-100 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-slate-500">提交后项目会保存到你的工作台，随时可以回来继续完善。</p>
+            <p className="text-sm leading-6 text-slate-500">提交后求职计划会保存到你的工作台，随时可以回来继续完善。</p>
             <button
               type="submit"
               disabled={isPending}
               className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white shadow-[0_12px_30px_-16px_rgba(83,74,183,0.9)] transition hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-200 disabled:cursor-not-allowed disabled:bg-primary-300"
             >
-              {isPending ? "正在保存..." : "保存项目"}
+              {isPending ? "正在保存..." : "保存求职计划"}
             </button>
           </div>
         </form>
@@ -201,15 +201,15 @@ export function NewProjectWorkspace() {
         <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
           <div className="rounded-[24px] border border-sky-100 bg-white/90 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-slate-900">项目草稿预览</h3>
+              <h3 className="text-lg font-semibold text-slate-900">求职计划草稿预览</h3>
               <span className="soft-chip">实时同步</span>
             </div>
 
             <div className="mt-5 space-y-4">
               <div className="rounded-2xl bg-sky-50/70 p-4">
-                <div className="text-xs uppercase tracking-[0.22em] text-sky-700">项目名称</div>
+                <div className="text-xs uppercase tracking-[0.22em] text-sky-700">求职计划名称</div>
                 <div className="mt-2 text-base font-medium text-slate-900">
-                  {liveDraft.projectName || "等待填写项目名称"}
+                  {liveDraft.projectName || "等待填写求职计划名称"}
                 </div>
               </div>
 

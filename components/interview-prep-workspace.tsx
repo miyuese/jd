@@ -29,6 +29,8 @@ type InterviewPrepWorkspaceProps = {
   selectedProjectId: string | null;
   jdRecords: Array<{ id: string; rawText: string; hasSummary: boolean; updatedAt: string }>;
   selectedJdId: string | null;
+  cards: Array<{ id: string; title: string; updatedAt: string }>;
+  selectedCardId: string | null;
   projectCardExists: boolean;
   matchAnalysisExists: boolean;
   latestOutput: {
@@ -72,6 +74,8 @@ export function InterviewPrepWorkspace({
   selectedProjectId,
   jdRecords,
   selectedJdId,
+  cards,
+  selectedCardId,
   projectCardExists,
   matchAnalysisExists,
   latestOutput,
@@ -83,7 +87,14 @@ export function InterviewPrepWorkspace({
     if (!selectedProjectId) {
       return;
     }
-    router.push(`/interview-prep?projectId=${selectedProjectId}&jdId=${jdId}`);
+    router.push(`/interview-prep?projectId=${selectedProjectId}&jdId=${jdId}${selectedCardId ? `&cardId=${selectedCardId}` : ""}`);
+  };
+
+  const handleCardChange = (cardId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/interview-prep?projectId=${selectedProjectId}${selectedJdId ? `&jdId=${selectedJdId}` : ""}&cardId=${cardId}`);
   };
   const [isGeneratingOneMin, startGeneratingOneMin] = useTransition();
   const [isGeneratingThreeMin, startGeneratingThreeMin] = useTransition();
@@ -149,7 +160,7 @@ export function InterviewPrepWorkspace({
     setError("");
 
     startGeneratingOneMin(async () => {
-      const result = await generateOneMinuteIntroAction(selectedProjectId, selectedJdId ?? undefined);
+      const result = await generateOneMinuteIntroAction(selectedProjectId, selectedJdId ?? undefined, selectedCardId ?? undefined);
 
       if (!result.success) {
         setError(result.message);
@@ -172,7 +183,7 @@ export function InterviewPrepWorkspace({
     setError("");
 
     startGeneratingThreeMin(async () => {
-      const result = await generateThreeMinuteStoryAction(selectedProjectId, selectedJdId ?? undefined);
+      const result = await generateThreeMinuteStoryAction(selectedProjectId, selectedJdId ?? undefined, selectedCardId ?? undefined);
 
       if (!result.success) {
         setError(result.message);
@@ -195,7 +206,7 @@ export function InterviewPrepWorkspace({
     setError("");
 
     startGeneratingQuestions(async () => {
-      const result = await generateInterviewQuestionsAction(selectedProjectId, selectedJdId ?? undefined);
+      const result = await generateInterviewQuestionsAction(selectedProjectId, selectedJdId ?? undefined, selectedCardId ?? undefined);
 
       if (!result.success) {
         setError(result.message);
@@ -225,9 +236,9 @@ export function InterviewPrepWorkspace({
               </svg>
             }
             title="还没有项目"
-            description="创建项目并完成项目卡片确认和 JD 匹配分析后，才能生成面试讲稿和追问清单。"
+            description="创建求职计划并完成项目卡片确认和 JD 匹配分析后，才能生成面试讲稿和追问清单。"
             action={{
-              label: "前往工作台创建项目",
+              label: "前往工作台创建求职计划",
               href: "/workspace"
             }}
           />
@@ -248,8 +259,8 @@ export function InterviewPrepWorkspace({
           </div>
 
           <div className="rounded-2xl border border-sky-100 bg-white/90 px-4 py-4 text-sm shadow-sm xl:w-[320px]">
-            <div className="text-xs text-slate-500">当前选中项目</div>
-            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择项目"}</div>
+            <div className="text-xs text-slate-500">当前选中求职计划</div>
+            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择求职计划"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">目标岗位：{selectedProject?.targetRole ?? "-"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">项目卡片：{projectCardExists ? "已就绪" : "未生成"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">匹配分析：{matchAnalysisExists ? "已就绪" : "未生成"}</div>
@@ -260,8 +271,8 @@ export function InterviewPrepWorkspace({
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="section-title">先选择要准备的项目</h2>
-            <p className="section-copy mt-2">不同项目会基于各自的项目卡片和 JD 匹配分析生成对应的面试内容。</p>
+            <h2 className="section-title">先选择要准备的求职计划</h2>
+            <p className="section-copy mt-2">不同求职计划会基于各自的项目卡片和 JD 匹配分析生成对应的面试内容。</p>
           </div>
           <div className="flex flex-col gap-3 lg:w-full lg:max-w-sm">
             <select
@@ -284,6 +295,19 @@ export function InterviewPrepWorkspace({
                 {jdRecords.map((jd, index) => (
                   <option key={jd.id} value={jd.id}>
                     目标 JD #{jdRecords.length - index} · {jd.hasSummary ? "已解析" : "未解析"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {cards.length > 0 ? (
+              <select
+                value={selectedCardId ?? ""}
+                onChange={(event) => handleCardChange(event.target.value)}
+                className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              >
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    项目卡片：{card.title}
                   </option>
                 ))}
               </select>
@@ -334,7 +358,7 @@ export function InterviewPrepWorkspace({
       {!projectCardExists || !matchAnalysisExists ? (
         <section className="page-card p-6 sm:p-8">
           <div className="rounded-[24px] border border-dashed border-sky-200 bg-sky-50/65 p-6 text-sm leading-7 text-slate-600">
-            当前项目还没有完整的项目卡片或匹配分析，暂时无法生成面试内容。请先完成项目卡片确认和 JD 匹配分析，再回到这里继续。
+            当前求职计划还没有完整的项目卡片或匹配分析，暂时无法生成面试内容。请先完成项目卡片确认和 JD 匹配分析，再回到这里继续。
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
             {!projectCardExists ? (
@@ -455,7 +479,7 @@ export function InterviewPrepWorkspace({
           <div>
             <span className="soft-chip">追问预测</span>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">高频追问清单</h2>
-            <p className="mt-2 text-sm leading-7 text-slate-600">围绕当前项目和目标岗位，生成可能被面试官追问的问题。</p>
+            <p className="mt-2 text-sm leading-7 text-slate-600">围绕当前求职计划、所选卡片和目标岗位，生成可能被面试官追问的问题。</p>
           </div>
           <button
             type="button"

@@ -53,6 +53,8 @@ type ProjectCardWorkspaceProps = {
   projectMaterialExists: boolean;
   questionAnswerCount: number;
   versions: VersionItem[];
+  resumes?: Array<{ id: string; title: string; updatedAt: string }>;
+  materials?: Array<{ id: string; title: string; updatedAt: string }>;
 };
 
 const factStatusOptions = [
@@ -102,14 +104,18 @@ export function ProjectCardWorkspace({
   initialCard,
   projectMaterialExists,
   questionAnswerCount,
-  versions
+  versions,
+  resumes = [],
+  materials = []
 }: ProjectCardWorkspaceProps) {
   const router = useRouter();
   const [isGenerating, startGenerating] = useTransition();
   const [isSavingCard, startSavingCard] = useTransition();
   const [isSavingVersion, startSavingVersion] = useTransition();
+  const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id ?? "");
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(materials.slice(0, 2).map((item) => item.id));
   const [generateMessage, setGenerateMessage] = useState(
-    initialCard ? "当前项目已有一份项目卡片草稿，可以继续确认和修改。" : "先生成项目卡片草稿，再进行事实确认。"
+    initialCard ? "当前卡片已有草稿，可以继续确认和修改。" : "先生成项目卡片草稿，再进行事实确认。"
   );
   const [generateError, setGenerateError] = useState("");
   const [responseModel, setResponseModel] = useState("");
@@ -133,7 +139,7 @@ export function ProjectCardWorkspace({
     setVersionError("");
     setResponseModel("");
     setGenerateMessage(
-      initialCard ? "当前项目已有一份项目卡片草稿，可以继续确认和修改。" : "先生成项目卡片草稿，再进行事实确认。"
+      initialCard ? "当前卡片已有草稿，可以继续确认和修改。" : "先生成项目卡片草稿，再进行事实确认。"
     );
     setSaveMessage(initialCard ? "当前卡片已加载，可以直接修改后保存。" : "当前还没有项目卡片草稿。");
     setVersionMessage(versions.length > 0 ? "下方展示的是已保存的项目卡片版本。" : "当前还没有保存过项目卡片版本。");
@@ -174,15 +180,25 @@ export function ProjectCardWorkspace({
     });
   };
 
-  const handleGenerateCard = () => {
-    if (!selectedProjectId) {
-      return;
-    }
-
+  const handleGenerateCard = (regenerate: boolean = false) => {
     setGenerateError("");
 
     startGenerating(async () => {
-      const result = await generateProjectCardDraftAction(selectedProjectId);
+      // 基于确认内容重新生成时，把已确认字段作为事实基线传给模型
+      const confirmedFields = regenerate && formValues
+        ? {
+            title: formValues.title,
+            background: formValues.background,
+            responsibility: formValues.responsibility,
+            result: formValues.result
+          }
+        : undefined;
+
+      const result = await generateProjectCardDraftAction(selectedProjectId, {
+        resumeMaterialId: selectedResumeId || undefined,
+        projectMaterialIds: selectedMaterialIds.length > 0 ? selectedMaterialIds : undefined,
+        confirmedFields
+      });
 
       if (!result.success) {
         setGenerateError(result.message);
@@ -196,7 +212,7 @@ export function ProjectCardWorkspace({
   };
 
   const handleSaveCard = () => {
-    if (!selectedProjectId || !formValues) {
+    if (!formValues) {
       return;
     }
 
@@ -204,7 +220,7 @@ export function ProjectCardWorkspace({
 
     startSavingCard(async () => {
       const result = await updateProjectCardAction({
-        projectId: selectedProjectId,
+        projectId: selectedProjectId ?? undefined,
         cardId: formValues.id,
         title: formValues.title,
         background: formValues.background,
@@ -227,14 +243,14 @@ export function ProjectCardWorkspace({
   };
 
   const handleSaveVersion = () => {
-    if (!selectedProjectId) {
+    if (!formValues) {
       return;
     }
 
     setVersionError("");
 
     startSavingVersion(async () => {
-      const result = await saveProjectCardVersionAction(selectedProjectId);
+      const result = await saveProjectCardVersionAction(selectedProjectId, formValues.id);
 
       if (!result.success) {
         setVersionError(result.message);
@@ -248,68 +264,53 @@ export function ProjectCardWorkspace({
     });
   };
 
-  if (projects.length === 0) {
-    return (
-      <section className="page-card p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">项目卡片</h1>
-        <p className="mt-2 text-sm text-slate-500">结构化整理项目信息</p>
-        <div className="mt-6">
-          <EmptyState
-            icon={
-              <svg className="h-12 w-12 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-              </svg>
-            }
-            title="还没有项目"
-            description="创建项目并录入项目材料后，才能生成结构化的项目卡片草稿。"
-            action={{
-              label: "前往工作台创建项目",
-              href: "/workspace"
-            }}
-          />
-        </div>
-      </section>
-    );
-  }
-
   return (
     <>
       <section className="page-card p-6">
         <h1 className="text-2xl font-semibold text-slate-900">项目卡片</h1>
         <p className="mt-2 text-sm text-slate-500">
-          把项目材料整理成结构化卡片，确认关键事实后可用于 JD 分析和简历改写。
+          把项目经历素材自由组合成结构化卡片，确认关键事实后可用于 JD 分析和简历改写。卡片不需要先创建求职计划。
         </p>
 
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="text-sm text-slate-500">当前项目</div>
-          <div className="mt-1 font-medium text-slate-900">{selectedProject?.name ?? "未选择"}</div>
-          <div className="mt-1 text-sm text-slate-600">目标岗位：{selectedProject?.targetRole ?? "-"}</div>
-        </div>
-      </section>
-
-      <section className="page-card p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="font-semibold text-slate-900">选择项目</h2>
-            <p className="mt-1 text-sm text-slate-500">不同项目有独立的卡片和版本记录。</p>
+        {projects.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            还没有求职计划也不影响建卡片——直接在下方选择简历和项目经历组合生成即可。也可以先到项目经历页录入素材。
           </div>
-          <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 lg:w-64">
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name} · {project.targetRole}
-              </option>
-            ))}
-          </select>
-        </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm text-slate-500">关联求职计划（可选）</div>
+            <div className="mt-1 font-medium text-slate-900">{selectedProject?.name ?? "未选择"}</div>
+            <div className="mt-1 text-sm text-slate-600">目标岗位：{selectedProject?.targetRole ?? "-"}</div>
+          </div>
+        )}
       </section>
 
-      {!projectMaterialExists ? (
+      {projects.length > 0 ? (
+        <section className="page-card p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">选择求职计划（可选）</h2>
+              <p className="mt-1 text-sm text-slate-500">不选也能生成卡片，卡片可随时关联到求职计划。</p>
+            </div>
+            <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 lg:w-64">
+              <option value="">不关联求职计划</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name} · {project.targetRole}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+      ) : null}
+
+      {selectedProjectId && !projectMaterialExists ? (
         <section className="page-card p-6">
           <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-            当前项目还没有原始材料，无法生成项目卡片。请先到项目材料页录入内容。
+            当前求职计划下还没有项目材料。你可以在下方直接勾选项目经历素材来生成卡片，不依赖计划内材料。
           </div>
-          <Link href={selectedProjectId ? `/project-materials?projectId=${selectedProjectId}` : "/project-materials"} className="mt-4 inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800">
-            前往项目材料页
+          <Link href="/project-materials" className="mt-4 inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800">
+            前往项目经历页
           </Link>
         </section>
       ) : null}
@@ -322,8 +323,59 @@ export function ProjectCardWorkspace({
             {responseModel ? <div className="mt-2 text-xs text-slate-500">模型：{responseModel}</div> : null}
             {generateError ? <ErrorDisplay error={generateError} compact /> : null}
             {isGenerating ? <GeneratingIndicator label="AI 正在生成项目卡片草稿" /> : null}
-            <button type="button" onClick={handleGenerateCard} disabled={isGenerating || !selectedProjectId} className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
+
+            {/* 组合选择：简历 + 多份项目经历 */}
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-slate-500">选择简历（可选）</label>
+                <select
+                  value={selectedResumeId}
+                  onChange={(event) => setSelectedResumeId(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-300"
+                >
+                  <option value="">不关联简历</option>
+                  {resumes.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title} · {formatDateTime(item.updatedAt)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-slate-500">选择项目经历（可多选）</label>
+                <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-xl border border-slate-200 p-2">
+                  {materials.length === 0 ? (
+                    <p className="px-2 py-1 text-xs text-slate-400">还没有项目经历，可先到项目材料页录入。</p>
+                  ) : (
+                    materials.map((item) => {
+                      const checked = selectedMaterialIds.includes(item.id);
+                      return (
+                        <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setSelectedMaterialIds((current) =>
+                                checked ? current.filter((id) => id !== item.id) : [...current, item.id]
+                              );
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-200"
+                          />
+                          <span className="truncate">{item.title}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button type="button" onClick={() => handleGenerateCard(false)} disabled={isGenerating || selectedMaterialIds.length === 0} className="mt-4 w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
               {isGenerating ? "生成中..." : "生成项目卡片草稿"}
+            </button>
+            <button type="button" onClick={() => handleGenerateCard(true)} disabled={isGenerating || !formValues || selectedMaterialIds.length === 0} className="mt-2 w-full rounded-lg border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:text-slate-400">
+              {isGenerating ? "重新生成中..." : "基于当前确认内容重新生成"}
             </button>
           </div>
 

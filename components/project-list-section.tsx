@@ -25,8 +25,8 @@ export function ProjectListSection({ projects }: { projects: ProjectListItem[] }
     <section className="page-card p-6 sm:p-8">
       <div className="flex items-center justify-between border-b border-[var(--line)] pb-5">
         <div>
-          <h2 className="section-title !text-xl">我的项目</h2>
-          <p className="section-copy mt-1.5">点击项目可查看详情</p>
+          <h2 className="section-title !text-xl">我的求职计划</h2>
+          <p className="section-copy mt-1.5">点击计划可进入项目卡片组合</p>
         </div>
         <span className="rounded-full border border-[var(--line)] bg-[var(--bg-deep)]/50 px-3 py-1 text-xs font-semibold text-[var(--ink-soft)]">
           {projects.length} 个
@@ -36,9 +36,9 @@ export function ProjectListSection({ projects }: { projects: ProjectListItem[] }
       {projects.length === 0 ? (
         <div className="mt-5">
           <EmptyState
-            title="还没有项目"
-            description="创建你的第一个项目，开始整理项目经历。"
-            action={{ label: "创建项目", href: "#new-project" }}
+            title="还没有求职计划"
+            description="遇到目标 JD 时创建求职计划；素材和卡片可以先行准备。"
+            action={{ label: "创建求职计划", href: "#new-project" }}
           />
         </div>
       ) : (

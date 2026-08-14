@@ -50,6 +50,9 @@ model ResumeMaterial {
   rawText     String   @db.Text
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  projectCards ProjectCard[]
+
+  @@index([clerkUserId, updatedAt])
 }
 
 model Project {
@@ -70,32 +73,41 @@ model Project {
 }
 
 model ProjectMaterial {
-  id          String             @id @default(cuid())
-  projectId   String
-  clerkUserId String
-  sourceType  MaterialSourceType @default(MANUAL_TEXT)
-  title       String?
-  rawText     String             @db.Text
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id            String             @id @default(cuid())
+  projectId     String?
+  clerkUserId   String
+  sourceType    MaterialSourceType @default(MANUAL_TEXT)
+  title         String?
+  projectName   String?
+  rawText       String             @db.Text
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  project       Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  questionAnswers QuestionAnswerRecord[]
+  cardLinks     ProjectCardMaterial[]
+
+  @@index([clerkUserId, updatedAt])
 }
 
 model QuestionAnswerRecord {
-  id           String   @id @default(cuid())
-  projectId    String
-  clerkUserId  String
-  roundIndex   Int      @default(1)
-  questionText String   @db.Text
-  answerText   String   @db.Text
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  projectId         String?
+  projectMaterialId String?
+  clerkUserId       String
+  roundIndex        Int             @default(1)
+  questionText      String          @db.Text
+  answerText        String          @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  project           Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectMaterial   ProjectMaterial? @relation(fields: [projectMaterialId], references: [id], onDelete: Cascade)
+
+  @@index([clerkUserId, updatedAt])
 }
 
 model ProjectCard {
   id                       String            @id @default(cuid())
-  projectId                String
+  projectId                String?
   clerkUserId              String
   title                    String?
   background               String?           @db.Text
@@ -105,9 +117,24 @@ model ProjectCard {
   result                   String?           @db.Text
   resultFactStatus         FactStatus        @default(NEEDS_CONFIRMATION)
   status                   ProjectCardStatus @default(PENDING_CONFIRMATION)
+  resumeMaterialId         String?
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
-  project                  Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project                  Project?          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  materials                ProjectCardMaterial[]
+  resumeMaterial           ResumeMaterial?   @relation(fields: [resumeMaterialId], references: [id], onDelete: SetNull)
+
+  @@index([clerkUserId, updatedAt])
+}
+
+model ProjectCardMaterial {
+  id                String          @id @default(cuid())
+  projectCardId     String
+  projectMaterialId String
+  projectCard       ProjectCard     @relation(fields: [projectCardId], references: [id], onDelete: Cascade)
+  projectMaterial   ProjectMaterial @relation(fields: [projectMaterialId], references: [id], onDelete: Cascade)
+
+  @@unique([projectCardId, projectMaterialId])
 }
 
 model JdRecord {
@@ -124,8 +151,9 @@ model JdRecord {
 
 model MatchAnalysis {
   id               String              @id @default(cuid())
-  projectId        String
+  projectId        String?
   jdRecordId       String?
+  projectCardId    String?
   clerkUserId      String
   status           MatchAnalysisStatus @default(DRAFT)
   matchedPoints    Json?
@@ -134,13 +162,16 @@ model MatchAnalysis {
   summary          String?             @db.Text
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
-  project          Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project          Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   jdRecord         JdRecord?           @relation(fields: [jdRecordId], references: [id], onDelete: SetNull)
+  projectCard      ProjectCard?        @relation(fields: [projectCardId], references: [id], onDelete: SetNull)
+
+  @@index([clerkUserId, updatedAt])
 }
 
 model VersionRecord {
   id                     String           @id @default(cuid())
-  projectId              String
+  projectId              String?
   clerkUserId            String
   type                   VersionType
   title                  String
@@ -148,9 +179,12 @@ model VersionRecord {
   sourceResumeMaterialId String?
   sourceProjectCardId    String?
   sourceMatchAnalysisId  String?
+  jdRecordId             String?
   createdAt              DateTime         @default(now())
-  project                Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project                Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   citations              JdOutputCitation[]
+
+  @@index([clerkUserId, createdAt])
 }
 
 // ========== 个人记忆系统（V1.1，Jd 前缀避免与原作者表冲突） ==========

@@ -60,6 +60,12 @@ type JdRecordOption = {
   updatedAt: string;
 };
 
+type CardOption = {
+  id: string;
+  title: string;
+  updatedAt: string;
+};
+
 type JdAnalysisWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
@@ -71,6 +77,8 @@ type JdAnalysisWorkspaceProps = {
   capabilitySummary: CapabilitySummary | null;
   matchAnalysis: MatchAnalysisData | null;
   versions: VersionItem[];
+  cards: CardOption[];
+  selectedCardId: string | null;
   dataLoadError?: string;
 };
 
@@ -115,6 +123,8 @@ export function JdAnalysisWorkspace({
   capabilitySummary,
   matchAnalysis,
   versions,
+  cards,
+  selectedCardId,
   dataLoadError
 }: JdAnalysisWorkspaceProps) {
   const router = useRouter();
@@ -128,14 +138,21 @@ export function JdAnalysisWorkspace({
     if (!selectedProjectId) {
       return;
     }
-    router.push(`/jd-analysis?projectId=${selectedProjectId}&jdId=${jdId}`);
+    router.push(`/jd-analysis?projectId=${selectedProjectId}&jdId=${jdId}${selectedCardId ? `&cardId=${selectedCardId}` : ""}`);
+  };
+
+  const handleCardChange = (cardId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/jd-analysis?projectId=${selectedProjectId}${selectedJdId ? `&jdId=${selectedJdId}` : ""}&cardId=${cardId}`);
   };
   const [jdText, setJdText] = useState(initialJdText);
-  const [jdMessage, setJdMessage] = useState(initialJdText ? "当前项目已保存一份 JD 原文，可以继续编辑后覆盖保存。" : "先粘贴目标 JD，再生成岗位能力摘要和匹配分析。");
+  const [jdMessage, setJdMessage] = useState(initialJdText ? "当前求职计划已保存一份 JD 原文，可以继续编辑后覆盖保存。" : "先粘贴目标 JD，再生成岗位能力摘要和匹配分析。");
   const [jdError, setJdError] = useState("");
-  const [summaryMessage, setSummaryMessage] = useState(capabilitySummary ? "当前项目已有岗位能力摘要，可以继续重新生成。" : "还没有岗位能力摘要。先保存 JD，再点击“解析 JD”。");
+  const [summaryMessage, setSummaryMessage] = useState(capabilitySummary ? "当前求职计划已有岗位能力摘要，可以继续重新生成。" : "还没有岗位能力摘要。先保存 JD，再点击“解析 JD”。");
   const [summaryError, setSummaryError] = useState("");
-  const [analysisMessage, setAnalysisMessage] = useState(matchAnalysis ? "当前项目已有匹配分析草稿，可以继续确认表达重点。" : "还没有匹配分析草稿。先生成 JD 摘要，再开始匹配分析。");
+  const [analysisMessage, setAnalysisMessage] = useState(matchAnalysis ? "当前求职计划已有匹配分析草稿，可以继续确认表达重点。" : "还没有匹配分析草稿。先生成 JD 摘要，再开始匹配分析。");
   const [analysisError, setAnalysisError] = useState("");
   const [versionMessage, setVersionMessage] = useState(versions.length > 0 ? "下方展示的是已保存的匹配分析版本。" : "当前还没有保存过匹配分析版本。");
   const [versionError, setVersionError] = useState("");
@@ -168,9 +185,9 @@ export function JdAnalysisWorkspace({
     setAnalysisError("");
     setVersionError("");
     setResponseModel("");
-    setJdMessage(initialJdText ? "当前项目已保存一份 JD 原文，可以继续编辑后覆盖保存。" : "先粘贴目标 JD，再生成岗位能力摘要和匹配分析。");
-    setSummaryMessage(capabilitySummary ? "当前项目已有岗位能力摘要，可以继续重新生成。" : "还没有岗位能力摘要。先保存 JD，再点击“解析 JD”。");
-    setAnalysisMessage(matchAnalysis ? "当前项目已有匹配分析草稿，可以继续确认表达重点。" : "还没有匹配分析草稿。先生成 JD 摘要，再开始匹配分析。");
+    setJdMessage(initialJdText ? "当前求职计划已保存一份 JD 原文，可以继续编辑后覆盖保存。" : "先粘贴目标 JD，再生成岗位能力摘要和匹配分析。");
+    setSummaryMessage(capabilitySummary ? "当前求职计划已有岗位能力摘要，可以继续重新生成。" : "还没有岗位能力摘要。先保存 JD，再点击“解析 JD”。");
+    setAnalysisMessage(matchAnalysis ? "当前求职计划已有匹配分析草稿，可以继续确认表达重点。" : "还没有匹配分析草稿。先生成 JD 摘要，再开始匹配分析。");
     setVersionMessage(versions.length > 0 ? "下方展示的是已保存的匹配分析版本。" : "当前还没有保存过匹配分析版本。");
     setAnalysisForm(
       matchAnalysis
@@ -248,7 +265,7 @@ export function JdAnalysisWorkspace({
     setAnalysisError("");
 
     startGeneratingAnalysis(async () => {
-      const result = await generateMatchAnalysisAction(selectedProjectId, selectedJdId ?? undefined);
+      const result = await generateMatchAnalysisAction(selectedProjectId, selectedJdId ?? undefined, selectedCardId ?? undefined);
 
       if (!result.success) {
         setAnalysisError(result.message);
@@ -300,7 +317,7 @@ export function JdAnalysisWorkspace({
     setVersionError("");
 
     startSavingVersion(async () => {
-      const result = await saveMatchAnalysisVersionAction(selectedProjectId);
+      const result = await saveMatchAnalysisVersionAction(selectedProjectId, selectedJdId ?? undefined, selectedCardId ?? undefined);
 
       if (!result.success) {
         setVersionError(result.message);
@@ -331,9 +348,9 @@ export function JdAnalysisWorkspace({
               </svg>
             }
             title="还没有项目"
-            description="创建项目并完成项目卡片确认后，才能开始 JD 分析和岗位匹配。"
+            description="创建求职计划并完成项目卡片确认后，才能开始 JD 分析和岗位匹配。"
             action={{
-              label: "前往工作台创建项目",
+              label: "前往工作台创建求职计划",
               href: "/workspace"
             }}
           />
@@ -354,8 +371,8 @@ export function JdAnalysisWorkspace({
           </div>
 
           <div className="rounded-2xl border border-sky-100 bg-white/90 px-4 py-4 text-sm shadow-sm xl:w-[320px]">
-            <div className="text-xs text-slate-500">当前选中项目</div>
-            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择项目"}</div>
+            <div className="text-xs text-slate-500">当前选中求职计划</div>
+            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择求职计划"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">目标岗位：{selectedProject?.targetRole ?? "-"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">项目卡片：{projectCardExists ? "已就绪" : "未生成"}</div>
           </div>
@@ -373,8 +390,8 @@ export function JdAnalysisWorkspace({
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="section-title">先选择要分析的项目</h2>
-            <p className="section-copy mt-2">不同项目会有各自独立的 JD、摘要、匹配分析和版本记录。</p>
+            <h2 className="section-title">先选择要分析的求职计划</h2>
+            <p className="section-copy mt-2">不同求职计划会有各自独立的 JD、摘要、匹配分析和版本记录。</p>
           </div>
           <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:max-w-sm">
             {projects.map((project) => (
@@ -388,7 +405,7 @@ export function JdAnalysisWorkspace({
 
       {!projectCardExists ? (
         <section className="page-card p-6 sm:p-8">
-          <div className="rounded-[24px] border border-dashed border-sky-200 bg-sky-50/65 p-6 text-sm leading-7 text-slate-600">当前项目还没有项目卡片，暂时无法开始匹配分析。先去项目卡片页生成并确认项目卡片，再回到这里继续。</div>
+          <div className="rounded-[24px] border border-dashed border-sky-200 bg-sky-50/65 p-6 text-sm leading-7 text-slate-600">当前求职计划还没有项目卡片，暂时无法开始匹配分析。先去项目卡片页生成并确认项目卡片，再回到这里继续。</div>
           <Link href={selectedProjectId ? `/project-card?projectId=${selectedProjectId}` : "/project-card"} className="mt-6 inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-primary-700">
             前往项目卡片页
           </Link>
@@ -527,9 +544,27 @@ export function JdAnalysisWorkspace({
                 <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">匹配分析草稿与重点确认</h2>
                 <p className="mt-2 text-sm leading-7 text-slate-600">系统会优先输出更具体的岗位匹配判断，并在每个模块下补一段“说人话版”解释，帮助你更快看懂这份分析到底在说什么。</p>
               </div>
-              <button type="button" onClick={handleGenerateAnalysis} disabled={isGeneratingAnalysis || !selectedProjectId} className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
-                {isGeneratingAnalysis ? "正在生成分析..." : "开始匹配分析"}
-              </button>
+              <div className="flex flex-col gap-3 lg:items-end">
+                {cards.length > 0 ? (
+                  <label className="flex items-center gap-2 text-xs text-slate-500">
+                    选择项目卡片：
+                    <select
+                      value={selectedCardId ?? ""}
+                      onChange={(event) => handleCardChange(event.target.value)}
+                      className="max-w-[240px] rounded-3xl border border-sky-100 bg-white px-4 py-2 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                    >
+                      {cards.map((card) => (
+                        <option key={card.id} value={card.id}>
+                          {card.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <button type="button" onClick={handleGenerateAnalysis} disabled={isGeneratingAnalysis || !selectedProjectId} className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
+                  {isGeneratingAnalysis ? "正在生成分析..." : "开始匹配分析"}
+                </button>
+              </div>
             </div>
 
             {isGeneratingAnalysis ? <GeneratingIndicator label="AI 正在生成匹配分析" /> : null}

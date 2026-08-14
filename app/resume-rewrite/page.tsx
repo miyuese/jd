@@ -5,6 +5,7 @@ import { listWorkspaceProjects } from "@/lib/neon-db";
 import { getResumeRewriteInputs } from "@/lib/stage9-data";
 import { getAbilityTagStats, listAbilityGaps } from "@/lib/memory-data";
 import { getLatestJdRecord, listJdRecords } from "@/lib/stage8-data";
+import { getLatestProjectCard, listProjectCards } from "@/lib/stage7-data";
 
 export const metadata: Metadata = {
   title: "简历改写"
@@ -13,13 +14,14 @@ export const metadata: Metadata = {
 export default async function ResumeRewritePage({
   searchParams
 }: {
-  searchParams?: { projectId?: string | string[]; jdId?: string | string[] };
+  searchParams?: { projectId?: string | string[]; jdId?: string | string[]; cardId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
-  const [projects, abilityGaps, abilityTagStats] = await Promise.all([
+  const [projects, abilityGaps, abilityTagStats, allCards] = await Promise.all([
     listWorkspaceProjects(userId),
     listAbilityGaps(userId),
-    getAbilityTagStats(userId)
+    getAbilityTagStats(userId),
+    listProjectCards(userId)
   ]);
   const serializedGaps = abilityGaps.map((gap) => ({
     ...gap,
@@ -37,6 +39,8 @@ export default async function ResumeRewritePage({
         selectedProjectId={null}
         jdRecords={[]}
         selectedJdId={null}
+        cards={[]}
+        selectedCardId={null}
         initialResumeText=""
         resumeSavedAt={null}
         projectCardExists={false}
@@ -47,19 +51,26 @@ export default async function ResumeRewritePage({
     );
   }
 
-  const [jdRecords, latestJd] = await Promise.all([
+  const [jdRecords, latestJd, projectCard] = await Promise.all([
     listJdRecords(selectedProjectId, userId),
-    getLatestJdRecord(selectedProjectId, userId)
+    getLatestJdRecord(selectedProjectId, userId),
+    getLatestProjectCard(selectedProjectId, userId)
   ]);
   const requestedJdId = Array.isArray(searchParams?.jdId) ? searchParams?.jdId[0] : searchParams?.jdId;
   const selectedJdId = jdRecords.some((jd) => jd.id === requestedJdId)
     ? requestedJdId ?? null
     : (latestJd?.id ?? null);
 
-  const { resumeMaterial, projectCard, matchAnalysis } = await getResumeRewriteInputs(
+  const requestedCardId = Array.isArray(searchParams?.cardId) ? searchParams?.cardId[0] : searchParams?.cardId;
+  const selectedCardId = allCards.some((card) => card.id === requestedCardId)
+    ? requestedCardId ?? null
+    : (projectCard?.id ?? null);
+
+  const { resumeMaterial, projectCard: resolvedProjectCard, matchAnalysis } = await getResumeRewriteInputs(
     selectedProjectId,
     userId,
-    selectedJdId ?? undefined
+    selectedJdId ?? undefined,
+    selectedCardId ?? undefined
   );
 
   // 雷达图数据：我的画像（来自记忆库能力标签）vs JD 要求（来自匹配分析的优先级）
@@ -99,9 +110,15 @@ export default async function ResumeRewritePage({
         updatedAt: jd.updatedAt.toISOString()
       }))}
       selectedJdId={selectedJdId}
+      cards={allCards.map((card) => ({
+        id: card.id,
+        title: card.title ?? "未命名卡片",
+        updatedAt: card.updatedAt.toISOString()
+      }))}
+      selectedCardId={selectedCardId}
       initialResumeText={resumeMaterial?.rawText ?? ""}
       resumeSavedAt={resumeMaterial?.updatedAt.toISOString() ?? null}
-      projectCardExists={Boolean(projectCard)}
+      projectCardExists={Boolean(resolvedProjectCard)}
       matchAnalysisExists={Boolean(matchAnalysis)}
       initialAbilityGaps={serializedGaps}
       initialRadarScores={initialRadarScores}

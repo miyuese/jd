@@ -155,7 +155,7 @@ export async function createMemorySource(input: {
   title?: string;
   rawText: string;
   sourceRefId?: string;
-  projectId?: string;
+  projectId?: string | null;
 }) {
   const sql = getSql();
   const id = randomUUID();
@@ -217,7 +217,7 @@ export async function ingestText(input: {
   title?: string;
   rawText: string;
   sourceRefId?: string;
-  projectId?: string;
+  projectId?: string | null;
 }) {
   const source = await createMemorySource(input);
   const chunks = splitIntoChunks(input.rawText);

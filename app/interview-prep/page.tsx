@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { InterviewPrepWorkspace } from "@/components/interview-prep-workspace";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { listWorkspaceProjects } from "@/lib/neon-db";
-import { getLatestProjectCard } from "@/lib/stage7-data";
+import { getLatestProjectCard, listProjectCards } from "@/lib/stage7-data";
 import { getLatestMatchAnalysis } from "@/lib/stage8-data";
 import { listInterviewOutputVersions } from "@/lib/stage10-data";
 import { listAbilityGaps } from "@/lib/memory-data";
@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   title: "面试准备"
 };
 
-async function getLatestInterviewOutputs(projectId: string, userId: string) {
-  const versions = await listInterviewOutputVersions(projectId, userId);
+async function getLatestInterviewOutputs(projectId: string, userId: string, sourceProjectCardId?: string | null, jdRecordId?: string | null) {
+  const versions = await listInterviewOutputVersions(projectId, userId, sourceProjectCardId, jdRecordId);
 
   const oneMinuteIntro = versions.find((v) => {
     const content = v.content as { type?: string };
@@ -40,10 +40,14 @@ async function getLatestInterviewOutputs(projectId: string, userId: string) {
 export default async function InterviewPrepPage({
   searchParams
 }: {
-  searchParams?: { projectId?: string | string[]; jdId?: string | string[] };
+  searchParams?: { projectId?: string | string[]; jdId?: string | string[]; cardId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
-  const [projects, abilityGaps] = await Promise.all([listWorkspaceProjects(userId), listAbilityGaps(userId)]);
+  const [projects, abilityGaps, allCards] = await Promise.all([
+    listWorkspaceProjects(userId),
+    listAbilityGaps(userId),
+    listProjectCards(userId)
+  ]);
   const serializedGaps = abilityGaps.map((gap) => ({
     ...gap,
     updatedAt: gap.updatedAt instanceof Date ? gap.updatedAt.toISOString() : String(gap.updatedAt)
@@ -60,6 +64,8 @@ export default async function InterviewPrepPage({
         selectedProjectId={null}
         jdRecords={[]}
         selectedJdId={null}
+        cards={[]}
+        selectedCardId={null}
         projectCardExists={false}
         matchAnalysisExists={false}
         latestOutput={{
@@ -72,10 +78,9 @@ export default async function InterviewPrepPage({
     );
   }
 
-  const [projectCard, matchAnalysis, latestOutput, jdRecords, latestJd] = await Promise.all([
+  const [projectCard, matchAnalysis, jdRecords, latestJd] = await Promise.all([
     getLatestProjectCard(selectedProjectId, userId),
     getLatestMatchAnalysis(selectedProjectId, userId),
-    getLatestInterviewOutputs(selectedProjectId, userId),
     listJdRecords(selectedProjectId, userId),
     getLatestJdRecord(selectedProjectId, userId)
   ]);
@@ -83,6 +88,14 @@ export default async function InterviewPrepPage({
   const selectedJdId = jdRecords.some((jd) => jd.id === requestedJdId)
     ? requestedJdId ?? null
     : (latestJd?.id ?? null);
+
+  const requestedCardId = Array.isArray(searchParams?.cardId) ? searchParams?.cardId[0] : searchParams?.cardId;
+  const selectedCardId = allCards.some((card) => card.id === requestedCardId)
+    ? requestedCardId ?? null
+    : (projectCard?.id ?? null);
+
+  // 按选中的卡片 × JD 交叉点读取输出（保证"卡片A×JD1"和"卡片B×JD1"的输出互不串台）
+  const crossOutput = await getLatestInterviewOutputs(selectedProjectId, userId, selectedCardId, selectedJdId);
 
   return (
     <InterviewPrepWorkspace
@@ -100,9 +113,15 @@ export default async function InterviewPrepPage({
         updatedAt: jd.updatedAt.toISOString()
       }))}
       selectedJdId={selectedJdId}
+      cards={allCards.map((card) => ({
+        id: card.id,
+        title: card.title ?? "未命名卡片",
+        updatedAt: card.updatedAt.toISOString()
+      }))}
+      selectedCardId={selectedCardId}
       projectCardExists={Boolean(projectCard)}
       matchAnalysisExists={Boolean(matchAnalysis)}
-      latestOutput={latestOutput}
+      latestOutput={crossOutput}
       initialAbilityGaps={serializedGaps}
     />
   );

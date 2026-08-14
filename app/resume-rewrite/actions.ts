@@ -165,7 +165,8 @@ export async function generateResumeRewriteAction(
         memoryEnhanced: memoryEvidence.length > 0
       },
       projectCard.id,
-      matchAnalysis.id
+      matchAnalysis.id,
+      matchAnalysis.jdRecordId
     );
 
     revalidatePath("/resume-rewrite");
@@ -218,7 +219,8 @@ export async function generateResumeFragmentRewriteAction(
   fullResumeText: string,
   selectedText: string,
   rewriteMode: "balanced" | "result-focused" | "responsibility-focused" | "jd-focused",
-  jdId?: string
+  jdId?: string,
+  cardId?: string
 ): Promise<ActionResult> {
   const parsed = fragmentRewriteSchema.safeParse({
     projectId,
@@ -237,8 +239,10 @@ export async function generateResumeFragmentRewriteAction(
   const userId = requireClerkUserId();
   const [project, projectCard, matchAnalysis] = await Promise.all([
     getWorkspaceProjectById(projectId, userId),
-    getLatestProjectCard(projectId, userId),
-    jdId ? getMatchAnalysisByJdRecord(jdId, userId) : getLatestMatchAnalysis(projectId, userId)
+    cardId
+      ? getProjectCardById(cardId, userId)
+      : getLatestProjectCard(projectId, userId),
+    jdId ? getMatchAnalysisByJdRecord(jdId, userId, cardId) : getLatestMatchAnalysis(projectId, userId)
   ]);
 
   if (!project || !projectCard || !matchAnalysis) {
@@ -280,4 +284,11 @@ export async function generateResumeFragmentRewriteAction(
       message: error instanceof Error ? error.message : "生成片段改写失败，请稍后再试。"
     };
   }
+}
+
+/** 按 id 查询用户的一张项目卡片（支持跨项目选择）。 */
+async function getProjectCardById(projectCardId: string, userId: string) {
+  const { listProjectCards } = await import("@/lib/stage7-data");
+  const cards = await listProjectCards(userId);
+  return cards.find((card) => card.id === projectCardId) ?? null;
 }

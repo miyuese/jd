@@ -271,11 +271,18 @@ export async function generateProjectCardDraft(input: {
   projectName: string;
   targetRole: string;
   currentNeed: string;
-  materialText: string;
+  materialText?: string;
+  materials?: Array<{ projectName: string; text: string }>;
   questionAnswers: Array<{
     questionText: string;
     answerText: string;
   }>;
+  confirmedFields?: {
+    title?: string;
+    background?: string;
+    responsibility?: string;
+    result?: string;
+  };
 }) {
   const qaText = input.questionAnswers.length
     ? input.questionAnswers
@@ -283,11 +290,31 @@ export async function generateProjectCardDraft(input: {
         .join("\n\n")
     : "当前还没有已保存问答，请主要基于项目原始材料生成草稿。";
 
+  // 多份材料：每份带项目名标签，防"材料打架"（A 项目结果安到 B 项目）
+  const materialsText = (input.materials && input.materials.length > 0
+    ? input.materials
+    : (input.materialText ? [{ projectName: input.projectName, text: input.materialText }] : []))
+    .map((item, index) => `【材料 ${index + 1} | 项目：${item.projectName}】\n${item.text}`)
+    .join("\n\n");
+
+  const confirmedText = input.confirmedFields
+    ? [
+        input.confirmedFields.title ? `已确认标题：${input.confirmedFields.title}` : "",
+        input.confirmedFields.background ? `已确认背景：${input.confirmedFields.background}` : "",
+        input.confirmedFields.responsibility ? `已确认职责：${input.confirmedFields.responsibility}` : "",
+        input.confirmedFields.result ? `已确认结果：${input.confirmedFields.result}` : ""
+      ].filter(Boolean).join("\n")
+    : "";
+
+  const confirmedInstruction = confirmedText
+    ? `\n\n以下字段是用户已确认的事实，必须原样保留、不得修改或推翻，只能在此基础上完善其余字段：\n${confirmedText}`
+    : "";
+
   const result = await generateStructuredJson({
     system:
       "你是一个求职项目复盘教练。你要把项目原始材料和复盘问答整理成结构化项目卡片草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
-    prompt: `请基于下面信息生成项目卡片草稿。\n\n项目名称：${input.projectName}\n目标岗位：${input.targetRole}\n当前需求：${input.currentNeed}\n项目原始材料：${input.materialText}\n\n已保存问答：\n${qaText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"title":"...","background":"...","responsibility":"...","result":"..."}。\n3. 所有字段都必须有内容，使用简体中文。\n4. background 聚焦项目背景、目标和问题场景。\n5. responsibility 聚焦你的职责、关键动作和决策。\n6. result 聚焦结果、效果、指标或价值。\n7. 不要编造明显超出材料的信息，不确定的地方宁可保持保守表达。`,
-    maxOutputTokens: 1500,
+    prompt: `请基于下面信息生成项目卡片草稿。\n\n项目名称：${input.projectName}\n目标岗位：${input.targetRole}\n当前需求：${input.currentNeed}\n\n项目材料（每份材料标注了所属项目，严禁把 A 项目的事实写到 B 项目的表述中）：\n${materialsText || "（暂无材料）"}\n\n已保存问答：\n${qaText}${confirmedInstruction}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"title":"...","background":"...","responsibility":"...","result":"..."}。\n3. 所有字段都必须有内容，使用简体中文。\n4. background 聚焦项目背景、目标和问题场景。\n5. responsibility 聚焦你的职责、关键动作和决策。\n6. result 聚焦结果、效果、指标或价值。\n7. 引用多份材料时，每段表述必须归属到对应项目名，禁止跨项目混用事实。\n8. 不要编造明显超出材料的信息，不确定的地方宁可保持保守表达。`,
+    maxOutputTokens: 2000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;

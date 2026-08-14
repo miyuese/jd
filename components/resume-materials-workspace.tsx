@@ -9,6 +9,13 @@ import { FileUpload } from "@/components/file-upload";
 type ResumeMaterialsWorkspaceProps = {
   initialContent: string;
   savedAt: string | null;
+  materials: Array<{
+    id: string;
+    title: string;
+    preview: string;
+    fullText: string;
+    updatedAt: string;
+  }>;
 };
 
 type ResumeMaterialFormValues = {
@@ -28,12 +35,12 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMaterialsWorkspaceProps) {
+export function ResumeMaterialsWorkspace({ initialContent, savedAt, materials }: ResumeMaterialsWorkspaceProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [submitMessage, setSubmitMessage] = useState(
     initialContent
-      ? "当前数据库中已存在一份简历内容，可以继续编辑后覆盖保存。"
+      ? "当前数据库中已存在一份简历内容，保存会新增一个版本，旧版本仍可在左侧回看。"
       : "当前还没有保存过简历。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
   );
   const [submitError, setSubmitError] = useState("");
@@ -51,7 +58,7 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
     setSubmitError("");
     setSubmitMessage(
       initialContent
-        ? "当前数据库中已存在一份简历内容，可以继续编辑后覆盖保存。"
+        ? "当前数据库中已存在一份简历内容，保存会新增一个版本，旧版本仍可在左侧回看。"
         : "当前还没有保存过简历。粘贴内容或上传文件并保存后，刷新页面仍会保留。"
     );
   }, [form, initialContent, savedAt]);
@@ -131,6 +138,37 @@ export function ResumeMaterialsWorkspace({ initialContent, savedAt }: ResumeMate
         </form>
 
         <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+          <div className="page-card p-5">
+            <h3 className="text-lg font-semibold text-slate-900">历史版本</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">每次保存会新增一个版本，旧版本不覆盖。点击可回看当时内容。</p>
+            <div className="mt-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+              {materials.length === 0 ? (
+                <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">还没有保存过简历版本。</p>
+              ) : (
+                materials.map((item) => {
+                  const isActive = item.updatedAt === latestSavedAt;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        form.setValue("content", item.fullText);
+                        setSubmitMessage("已回看历史版本，可复制内容，或在其基础上编辑后保存为新版本。");
+                      }}
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition ${isActive ? "border-sky-300 bg-sky-50" : "border-slate-100 bg-white hover:border-sky-200"}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium text-slate-800">{item.title}</span>
+                        <span className="shrink-0 text-xs text-slate-400">{formatDateTime(item.updatedAt)}</span>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-500">{item.preview || "（空内容）"}</p>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
           <div className="page-card p-5">
             <h3 className="text-lg font-semibold text-slate-900">这份简历的用途</h3>
             <div className="mt-4 space-y-3 text-sm leading-7 text-slate-600">

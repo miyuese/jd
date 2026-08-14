@@ -28,6 +28,8 @@ type ResumeRewriteWorkspaceProps = {
   selectedProjectId: string | null;
   jdRecords: Array<{ id: string; rawText: string; hasSummary: boolean; updatedAt: string }>;
   selectedJdId: string | null;
+  cards: Array<{ id: string; title: string; updatedAt: string }>;
+  selectedCardId: string | null;
   initialResumeText: string;
   resumeSavedAt: string | null;
   projectCardExists: boolean;
@@ -173,6 +175,8 @@ export function ResumeRewriteWorkspace({
   selectedProjectId,
   jdRecords,
   selectedJdId,
+  cards,
+  selectedCardId,
   initialResumeText,
   resumeSavedAt,
   projectCardExists,
@@ -186,7 +190,14 @@ export function ResumeRewriteWorkspace({
     if (!selectedProjectId) {
       return;
     }
-    router.push(`/resume-rewrite?projectId=${selectedProjectId}&jdId=${jdId}`);
+    router.push(`/resume-rewrite?projectId=${selectedProjectId}&jdId=${jdId}${selectedCardId ? `&cardId=${selectedCardId}` : ""}`);
+  };
+
+  const handleCardChange = (cardId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/resume-rewrite?projectId=${selectedProjectId}${selectedJdId ? `&jdId=${selectedJdId}` : ""}&cardId=${cardId}`);
   };
   const [isGenerating, setGenerating] = useState(false);
   const [streamPreview, setStreamPreview] = useState("");
@@ -264,7 +275,8 @@ export function ResumeRewriteWorkspace({
           projectId: selectedProjectId,
           resumeText: resumeContext,
           rewriteMode,
-          jdId: selectedJdId ?? undefined
+          jdId: selectedJdId ?? undefined,
+          cardId: selectedCardId ?? undefined
         })
       });
 
@@ -416,7 +428,7 @@ export function ResumeRewriteWorkspace({
     setRewriteError("");
 
     startGeneratingFragment(async () => {
-      const result = await generateResumeFragmentRewriteAction(selectedProjectId, resumeContext, selectedFragment, rewriteMode, selectedJdId ?? undefined);
+      const result = await generateResumeFragmentRewriteAction(selectedProjectId, resumeContext, selectedFragment, rewriteMode, selectedJdId ?? undefined, selectedCardId ?? undefined);
 
       if (!result.success) {
         setRewriteError(result.message);
@@ -489,9 +501,9 @@ export function ResumeRewriteWorkspace({
               </svg>
             }
             title="还没有项目"
-            description="创建项目并完成项目卡片确认和 JD 匹配分析后，才能开始简历改写。"
+            description="创建求职计划并完成项目卡片确认和 JD 匹配分析后，才能开始简历改写。"
             action={{
-              label: "前往工作台创建项目",
+              label: "前往工作台创建求职计划",
               href: "/workspace"
             }}
           />
@@ -512,8 +524,8 @@ export function ResumeRewriteWorkspace({
           </div>
 
           <div className="rounded-2xl border border-sky-100 bg-white/90 px-4 py-4 text-sm shadow-sm xl:w-[320px]">
-            <div className="text-xs text-slate-500">当前选中项目</div>
-            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择项目"}</div>
+            <div className="text-xs text-slate-500">当前选中求职计划</div>
+            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择求职计划"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">目标岗位：{selectedProject?.targetRole ?? "-"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">项目卡片：{projectCardExists ? "已就绪" : "未生成"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">匹配分析：{matchAnalysisExists ? "已就绪" : "未生成"}</div>
@@ -525,8 +537,8 @@ export function ResumeRewriteWorkspace({
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="section-title">先选择要改写的项目</h2>
-            <p className="section-copy mt-2">不同项目会基于各自的项目卡片和 JD 匹配分析生成对应的简历改写草稿。</p>
+            <h2 className="section-title">先选择要改写的求职计划</h2>
+            <p className="section-copy mt-2">不同求职计划会基于各自的项目卡片和 JD 匹配分析生成对应的简历改写草稿。</p>
           </div>
           <div className="flex flex-col gap-3 lg:w-full lg:max-w-sm">
             <select value={selectedProjectId ?? ""} onChange={(event) => handleProjectChange(event.target.value)} className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100">
@@ -545,6 +557,19 @@ export function ResumeRewriteWorkspace({
                 {jdRecords.map((jd, index) => (
                   <option key={jd.id} value={jd.id}>
                     目标 JD #{jdRecords.length - index} · {jd.hasSummary ? "已解析" : "未解析"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {cards.length > 0 ? (
+              <select
+                value={selectedCardId ?? ""}
+                onChange={(event) => handleCardChange(event.target.value)}
+                className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+              >
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    项目卡片：{card.title}
                   </option>
                 ))}
               </select>
@@ -607,7 +632,7 @@ export function ResumeRewriteWorkspace({
       {!projectCardExists || !matchAnalysisExists ? (
         <section className="page-card p-6 sm:p-8">
           <div className="rounded-[24px] border border-dashed border-sky-200 bg-sky-50/65 p-6 text-sm leading-7 text-slate-600">
-            当前项目还没有完整的项目卡片或匹配分析，暂时无法开始简历改写。请先完成项目卡片确认和 JD 匹配分析，再回到这里继续。
+            当前求职计划还没有完整的项目卡片或匹配分析，暂时无法开始简历改写。请先完成项目卡片确认和 JD 匹配分析，再回到这里继续。
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
             {!projectCardExists ? (
@@ -630,7 +655,7 @@ export function ResumeRewriteWorkspace({
             <div>
               <span className="soft-chip">改写对比</span>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">原文与改写稿对比</h2>
-              <p className="mt-2 text-sm leading-7 text-slate-600">左侧保留当前简历原文，右侧展示针对当前项目生成的改写稿。</p>
+              <p className="mt-2 text-sm leading-7 text-slate-600">左侧保留当前简历原文，右侧展示针对当前求职计划与所选卡片生成的改写稿。</p>
             </div>
             <button type="button" onClick={handleGenerateRewrite} disabled={isGenerating || !selectedProjectId || !projectCardExists || !matchAnalysisExists} className="inline-flex items-center justify-center rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
               {isGenerating ? "正在生成改写稿..." : "生成简历改写草稿"}

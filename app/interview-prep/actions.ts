@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { generateInterviewQuestionsList, generateOneMinuteIntro, generateThreeMinuteStory } from "@/lib/ai-config";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
-import { getLatestProjectCard } from "@/lib/stage7-data";
+import { getLatestProjectCard, listProjectCards } from "@/lib/stage7-data";
 import { getLatestMatchAnalysis, getMatchAnalysisByJdRecord } from "@/lib/stage8-data";
 import { createInterviewOutputVersion } from "@/lib/stage10-data";
 
@@ -23,11 +23,13 @@ type ActionResult =
       message: string;
     };
 
-async function getInterviewInputs(projectId: string, userId: string, jdId?: string) {
+async function getInterviewInputs(projectId: string, userId: string, jdId?: string, cardId?: string) {
   const [project, projectCard, matchAnalysis] = await Promise.all([
     getWorkspaceProjectById(projectId, userId),
-    getLatestProjectCard(projectId, userId),
-    jdId ? getMatchAnalysisByJdRecord(jdId, userId) : getLatestMatchAnalysis(projectId, userId)
+    cardId
+      ? listProjectCards(userId).then((cards) => cards.find((card) => card.id === cardId) ?? null)
+      : getLatestProjectCard(projectId, userId),
+    jdId ? getMatchAnalysisByJdRecord(jdId, userId, cardId) : getLatestMatchAnalysis(projectId, userId)
   ]);
 
   if (!project) {
@@ -49,11 +51,11 @@ async function getInterviewInputs(projectId: string, userId: string, jdId?: stri
   };
 }
 
-export async function generateOneMinuteIntroAction(projectId: string, jdId?: string): Promise<ActionResult> {
+export async function generateOneMinuteIntroAction(projectId: string, jdId?: string, cardId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
 
   try {
-    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId);
+    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId, cardId);
     const result = await generateOneMinuteIntro({
       projectCard: {
         title: projectCard.title ?? project.name,
@@ -75,7 +77,8 @@ export async function generateOneMinuteIntroAction(projectId: string, jdId?: str
       `1 分钟介绍 · ${project.name}`,
       { type: "ONE_MINUTE_INTRO", ...result },
       projectCard.id,
-      matchAnalysis.id
+      matchAnalysis.id,
+      matchAnalysis.jdRecordId
     );
 
     revalidatePath("/interview-prep");
@@ -96,11 +99,11 @@ export async function generateOneMinuteIntroAction(projectId: string, jdId?: str
   }
 }
 
-export async function generateThreeMinuteStoryAction(projectId: string, jdId?: string): Promise<ActionResult> {
+export async function generateThreeMinuteStoryAction(projectId: string, jdId?: string, cardId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
 
   try {
-    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId);
+    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId, cardId);
     const result = await generateThreeMinuteStory({
       projectCard: {
         title: projectCard.title ?? project.name,
@@ -122,7 +125,8 @@ export async function generateThreeMinuteStoryAction(projectId: string, jdId?: s
       `3 分钟展开稿 · ${project.name}`,
       { type: "THREE_MINUTE_STORY", ...result },
       projectCard.id,
-      matchAnalysis.id
+      matchAnalysis.id,
+      matchAnalysis.jdRecordId
     );
 
     revalidatePath("/interview-prep");
@@ -143,11 +147,11 @@ export async function generateThreeMinuteStoryAction(projectId: string, jdId?: s
   }
 }
 
-export async function generateInterviewQuestionsAction(projectId: string, jdId?: string): Promise<ActionResult> {
+export async function generateInterviewQuestionsAction(projectId: string, jdId?: string, cardId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
 
   try {
-    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId);
+    const { project, projectCard, matchAnalysis } = await getInterviewInputs(projectId, userId, jdId, cardId);
     const result = await generateInterviewQuestionsList({
       projectCard: {
         title: projectCard.title ?? project.name,
@@ -169,7 +173,8 @@ export async function generateInterviewQuestionsAction(projectId: string, jdId?:
       `高频追问清单 · ${project.name}`,
       { type: "INTERVIEW_QUESTIONS", ...result },
       projectCard.id,
-      matchAnalysis.id
+      matchAnalysis.id,
+      matchAnalysis.jdRecordId
     );
 
     revalidatePath("/interview-prep");

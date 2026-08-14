@@ -23,12 +23,27 @@ type VersionItem = {
   sourceResumeMaterialId: string | null;
   sourceProjectCardId: string | null;
   sourceMatchAnalysisId: string | null;
+  jdRecordId: string | null;
   createdAt: string;
+};
+
+type CardOption = {
+  id: string;
+  title: string;
+};
+
+type JdOption = {
+  id: string;
+  title: string;
 };
 
 type HistoryWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
+  cards: CardOption[];
+  selectedCardId: string | null;
+  jdRecords: JdOption[];
+  selectedJdId: string | null;
   initialVersions: VersionItem[];
 };
 
@@ -99,7 +114,15 @@ function getContentPreview(content: unknown): string {
   return JSON.stringify(content).slice(0, 120) + "...";
 }
 
-export function HistoryWorkspace({ projects, selectedProjectId, initialVersions }: HistoryWorkspaceProps) {
+export function HistoryWorkspace({
+  projects,
+  selectedProjectId,
+  cards,
+  selectedCardId,
+  jdRecords,
+  selectedJdId,
+  initialVersions
+}: HistoryWorkspaceProps) {
   const router = useRouter();
   const [versions, setVersions] = useState<VersionItem[]>(initialVersions);
   const [isLoading, startLoading] = useTransition();
@@ -119,6 +142,31 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
 
   const handleProjectChange = (projectId: string) => {
     router.push(`/history?projectId=${projectId}`);
+  };
+
+  const handleCardChange = (cardId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(
+      `/history?projectId=${selectedProjectId}&cardId=${cardId}${selectedJdId ? `&jdId=${selectedJdId}` : ""}`
+    );
+  };
+
+  const handleJdChange = (jdId: string) => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(
+      `/history?projectId=${selectedProjectId}${selectedCardId ? `&cardId=${selectedCardId}` : ""}&jdId=${jdId}`
+    );
+  };
+
+  const handleClearCrossFilter = () => {
+    if (!selectedProjectId) {
+      return;
+    }
+    router.push(`/history?projectId=${selectedProjectId}`);
   };
 
   const handleViewDetail = (version: VersionItem) => {
@@ -160,7 +208,7 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
               </svg>
             }
             title="还没有版本记录"
-            description="创建项目并完成项目卡片确认、匹配分析或简历改写后，版本记录会自动出现在这里。"
+            description="创建求职计划并完成项目卡片确认、匹配分析或简历改写后，版本记录会自动出现在这里。"
             action={{
               label: "前往工作台",
               href: "/workspace"
@@ -185,8 +233,8 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
           </div>
 
           <div className="rounded-2xl border border-sky-100 bg-white/90 px-4 py-4 text-sm shadow-sm xl:w-[320px]">
-            <div className="text-xs text-slate-500">当前选中项目</div>
-            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择项目"}</div>
+            <div className="text-xs text-slate-500">当前选中求职计划</div>
+            <div className="mt-2 font-medium text-slate-900">{selectedProject?.name ?? "未选择求职计划"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">目标岗位：{selectedProject?.targetRole ?? "-"}</div>
             <div className="mt-1 text-xs leading-6 text-slate-600">版本数量：{selectedProject?.versionCount ?? 0}</div>
           </div>
@@ -196,8 +244,8 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
       <section className="page-card p-6 sm:p-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="section-title">选择要查看的项目</h2>
-            <p className="section-copy mt-2">只显示有版本记录的项目。</p>
+            <h2 className="section-title">选择要查看的求职计划</h2>
+            <p className="section-copy mt-2">只显示有版本记录的求职计划。</p>
           </div>
           <select
             value={selectedProjectId ?? ""}
@@ -211,6 +259,49 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
             ))}
           </select>
         </div>
+
+        {/* 交叉点筛选：卡片 × JD */}
+        {(cards.length > 0 || jdRecords.length > 0) && selectedProjectId ? (
+          <div className="mt-5 flex flex-col gap-3 border-t border-sky-100 pt-5 lg:flex-row lg:items-center">
+            <div className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">按交叉点筛选</div>
+            <select
+              value={selectedCardId ?? ""}
+              onChange={(event) => handleCardChange(event.target.value)}
+              className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:w-56"
+            >
+              <option value="">全部卡片</option>
+              {cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  卡片：{card.title}
+                </option>
+              ))}
+            </select>
+            <select
+              value={selectedJdId ?? ""}
+              onChange={(event) => handleJdChange(event.target.value)}
+              className="w-full rounded-3xl border border-sky-100 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100 lg:w-44"
+            >
+              <option value="">全部 JD</option>
+              {jdRecords.map((jd) => (
+                <option key={jd.id} value={jd.id}>
+                  {jd.title}
+                </option>
+              ))}
+            </select>
+            {selectedCardId || selectedJdId ? (
+              <button
+                type="button"
+                onClick={handleClearCrossFilter}
+                className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-white px-4 py-2 text-xs font-medium text-sky-700 transition hover:border-sky-300"
+              >
+                清除筛选
+              </button>
+            ) : null}
+            <p className="text-xs leading-6 text-slate-400">
+              同时选择卡片与 JD 时，只显示该组合下的版本。
+            </p>
+          </div>
+        ) : null}
       </section>
 
       {restoreError ? <ErrorDisplay error={restoreError} compact /> : null}
@@ -254,6 +345,11 @@ export function HistoryWorkspace({ projects, selectedProjectId, initialVersions 
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${config.color}`}>
                           {config.label}
                         </span>
+                        {version.sourceProjectCardId && version.jdRecordId ? (
+                          <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
+                            卡片 × JD 交叉产物
+                          </span>
+                        ) : null}
                         <span className="text-sm text-slate-500">{formatRelativeTime(version.createdAt)}</span>
                       </div>
                       <div className="flex gap-2">

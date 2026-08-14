@@ -19,7 +19,7 @@ export async function autoIngestAndExtract(clerkUserId: string, input: {
   title?: string;
   rawText: string;
   sourceRefId?: string;
-  projectId?: string;
+  projectId?: string | null;
 }) {
   try {
     const exists = await findMemorySourceByRef(clerkUserId, input.sourceRefId ?? "");

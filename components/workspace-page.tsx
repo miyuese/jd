@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, PenLine, Plus, ScanSearch, Upload } from "lucide-react";
+import { ArrowUpRight, Layers, PenLine, ScanSearch, Upload } from "lucide-react";
 import { NewProjectWorkspace } from "@/components/new-project-workspace";
 import { ProjectListSection } from "@/components/project-list-section";
 import { Reveal } from "@/components/fx/reveal";
@@ -10,29 +10,29 @@ const quickEntryItems = navItems.filter((item) => item.href !== "/workspace").sl
 const flowSteps = [
   {
     index: "01",
-    title: "新建项目",
-    description: "填写项目名称与目标岗位",
-    href: "/workspace",
-    icon: Plus
-  },
-  {
-    index: "02",
-    title: "录入材料 + AI 复盘",
-    description: "简历材料 / 项目材料 → 项目卡片确认",
-    href: "/project-card",
+    title: "录入素材",
+    description: "简历材料 + 项目经历，随时可录",
+    href: "/project-materials",
     icon: Upload
   },
   {
+    index: "02",
+    title: "自由组合生成卡片",
+    description: "选简历 + 多选经历 → 项目卡片确认",
+    href: "/cards",
+    icon: Layers
+  },
+  {
     index: "03",
-    title: "JD 解析 + 匹配分析",
-    description: "粘贴目标 JD → 能力摘要 → 匹配点/差距点",
+    title: "创建求职计划 + JD 分析",
+    description: "遇到 JD 时建计划，选卡片 × JD 匹配",
     href: "/jd-analysis",
     icon: ScanSearch
   },
   {
     index: "04",
     title: "简历改写 + 面试准备",
-    description: "生成贴合 JD 的简历与面试讲稿",
+    description: "基于卡片关联的简历与经历生成表达",
     href: "/resume-rewrite",
     icon: PenLine
   }
@@ -67,12 +67,12 @@ export function WorkspacePage({ projectCount, projects }: WorkspacePageProps) {
           <div className="eyebrow">Workspace</div>
           <h1 className="display-lg mt-4 text-[var(--ink)]">工作台</h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--ink-soft)]">
-            管理你的求职项目，完成从项目复盘到面试准备的完整流程。
+            管理你的求职计划，从素材录入、卡片组合到面试准备的完整流程。
           </p>
           <div className="mt-5 flex items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full border border-[var(--brand-soft)] bg-[var(--brand-soft)] px-3.5 py-1.5 text-sm font-semibold text-[var(--brand)]">
               <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
-              我的项目：{projectCount} 个
+              我的求职计划：{projectCount} 个
             </span>
           </div>
         </div>

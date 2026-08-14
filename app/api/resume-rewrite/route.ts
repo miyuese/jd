@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { streamResumeRewriteDraft } from "@/lib/ai-config";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
-import { getLatestProjectCard } from "@/lib/stage7-data";
+import { getLatestProjectCard, listProjectCards } from "@/lib/stage7-data";
 import { getLatestMatchAnalysis, getMatchAnalysisByJdRecord } from "@/lib/stage8-data";
 import { createInterviewOutputVersion } from "@/lib/stage10-data";
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "未登录，无法生成简历改写。" }, { status: 401 });
   }
 
-  let body: { projectId?: unknown; resumeText?: unknown; rewriteMode?: unknown; jdId?: unknown };
+  let body: { projectId?: unknown; resumeText?: unknown; rewriteMode?: unknown; jdId?: unknown; cardId?: unknown };
 
   try {
     body = (await request.json()) as typeof body;
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
   const resumeText = typeof body.resumeText === "string" ? body.resumeText : "";
   const rewriteMode = typeof body.rewriteMode === "string" ? body.rewriteMode : "";
   const jdId = typeof body.jdId === "string" && body.jdId ? body.jdId : undefined;
+  const cardId = typeof body.cardId === "string" && body.cardId ? body.cardId : undefined;
 
   if (!projectId) {
     return NextResponse.json({ error: "缺少项目信息，请重新选择项目。" }, { status: 400 });
@@ -58,8 +59,8 @@ export async function POST(request: NextRequest) {
 
   const [project, projectCard, matchAnalysis] = await Promise.all([
     getWorkspaceProjectById(projectId, userId),
-    getLatestProjectCard(projectId, userId),
-    jdId ? getMatchAnalysisByJdRecord(jdId, userId) : getLatestMatchAnalysis(projectId, userId)
+    cardId ? resolveCardById(cardId, userId) : getLatestProjectCard(projectId, userId),
+    jdId ? getMatchAnalysisByJdRecord(jdId, userId, cardId) : getLatestMatchAnalysis(projectId, userId)
   ]);
 
   if (!project) {
@@ -134,7 +135,8 @@ export async function POST(request: NextRequest) {
             memoryEnhanced: false
           },
           projectCard.id,
-          matchAnalysis.id
+          matchAnalysis.id,
+          matchAnalysis.jdRecordId
         );
 
         send({
@@ -173,6 +175,12 @@ const rewriteModeLabels: Record<RewriteMode, string> = {
   "responsibility-focused": "职责优先",
   "jd-focused": "岗位贴合"
 };
+
+/** 按 id 解析用户的一张项目卡片（支持跨项目选择，供交叉点改写用）。 */
+async function resolveCardById(cardId: string, userId: string) {
+  const cards = await listProjectCards(userId);
+  return cards.find((card) => card.id === cardId) ?? null;
+}
 
 /** 从完整流文本中提取简历改写 JSON（多层兜底，与 lib/ai-json.ts 一致）。 */
 function parseRewriteJson(text: string): { rewrite: string; reasoning: string; highlights: string[] } | null {

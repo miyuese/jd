@@ -17,7 +17,7 @@ const factStatusSchema = z.enum(["CONFIRMED", "NEEDS_CONFIRMATION", "EXPRESSION_
 const cardStatusSchema = z.enum(["DRAFT", "PENDING_CONFIRMATION", "CONFIRMED"]);
 
 const updateProjectCardSchema = z.object({
-  projectId: z.string().trim().min(1, "缺少项目信息，请重新选择项目。"),
+  projectId: z.string().trim().min(1, "缺少项目信息，请重新选择项目。").optional(),
   cardId: z.string().trim().min(1, "当前还没有可编辑的项目卡片草稿。"),
   title: z.string().trim().min(1, "请填写项目卡片标题。"),
   background: z.string().trim().min(1, "请填写项目背景。"),
@@ -35,54 +35,108 @@ type ActionResult =
       message: string;
       savedAt?: string;
       model?: string;
+      data?: unknown;
     }
   | {
       success: false;
       message: string;
     };
 
-export async function generateProjectCardDraftAction(projectId: string): Promise<ActionResult> {
-  const userId = requireClerkUserId();
-  const project = await getWorkspaceProjectById(projectId, userId);
-
-  if (!project) {
-    return {
-      success: false,
-      message: "当前项目不存在，或你无权为该项目生成项目卡片。"
+export async function generateProjectCardDraftAction(
+  projectId: string | null,
+  options: {
+    resumeMaterialId?: string;
+    projectMaterialIds?: string[];
+    confirmedFields?: {
+      title?: string;
+      background?: string;
+      responsibility?: string;
+      result?: string;
     };
+  } = {}
+): Promise<ActionResult> {
+  const userId = requireClerkUserId();
+
+  // 组合模式：明确传入简历 + 多份经历时，直接用选中的材料（素材驱动，不依赖求职计划）
+  let materials: Array<{ projectName: string; text: string }> = [];
+  let resumeMaterialId = options.resumeMaterialId ?? null;
+
+  if (options.projectMaterialIds && options.projectMaterialIds.length > 0) {
+    const selectedMaterials = await Promise.all(
+      options.projectMaterialIds.map((id) =>
+        sqlQueryMaterial(userId, id)
+      )
+    );
+    materials = selectedMaterials
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .map((item) => ({ projectName: item!.projectName ?? "未命名项目", text: item!.rawText }));
+  } else if (projectId) {
+    // 兼容旧流程：未选择素材时回退到项目下的最新材料
+    const project = await getWorkspaceProjectById(projectId, userId);
+    const material = project ? await getLatestProjectMaterial(projectId, userId) : null;
+    if (project && material?.rawText.trim()) {
+      materials = [{ projectName: project.name, text: material.rawText }];
+    }
   }
 
-  const material = await getLatestProjectMaterial(projectId, userId);
-  const timeline = await listQuestionAnswerTimeline(projectId, userId);
+  // 问答来源：优先选中素材下的问答（方案 A），否则项目维度（兼容旧流程）
+  const questionAnswers = options.projectMaterialIds?.length
+    ? (
+        await Promise.all(
+          options.projectMaterialIds.map(async (id) => {
+            const timeline = await listQuestionAnswerTimeline({ projectMaterialId: id }, userId);
+            return timeline.map((item) => ({
+              questionText: item.questionText,
+              answerText: item.answerText
+            }));
+          })
+        )
+      ).flat()
+    : projectId
+      ? (await listQuestionAnswerTimeline({ projectId }, userId)).map((item) => ({
+          questionText: item.questionText,
+          answerText: item.answerText
+        }))
+      : [];
 
-  if (!material?.rawText.trim()) {
+  if (materials.length === 0) {
     return {
       success: false,
-      message: "请先到项目材料页保存项目原始材料，再生成项目卡片草稿。"
+      message: "请先到项目经历页保存项目原始材料，或选择要组合的项目经历，再生成项目卡片草稿。"
     };
   }
 
   try {
     const draft = await generateProjectCardDraft({
-      projectName: project.name,
-      targetRole: project.targetRole,
-      currentNeed: project.currentNeed,
-      materialText: material.rawText,
-      questionAnswers: timeline.map((item) => ({
-        questionText: item.questionText,
-        answerText: item.answerText
-      }))
+      projectName: materials.map((item) => item.projectName).join(" + ") || "项目卡片",
+      targetRole: "",
+      currentNeed: "从项目经历素材中提炼结构化项目卡片，用于后续岗位匹配与简历改写。",
+      materials,
+      questionAnswers,
+      confirmedFields: options.confirmedFields
     });
 
-    const card = await saveGeneratedProjectCard(projectId, userId, draft);
+    const card = await saveGeneratedProjectCard(
+      userId,
+      draft,
+      {
+        projectId,
+        resumeMaterialId,
+        projectMaterialIds: options.projectMaterialIds
+      }
+    );
 
     revalidatePath("/project-card");
+    revalidatePath("/cards");
 
     return {
       success: true,
-      message: "项目卡片草稿已生成并保存，可以继续确认和修改关键事实。",
+      message: options.confirmedFields
+        ? "已基于确认内容重新生成项目卡片草稿并保存，可以继续确认和修改关键事实。"
+        : "项目卡片草稿已生成并保存，可以继续确认和修改关键事实。",
       savedAt: card.updatedAt.toISOString(),
-      model: draft.model
+      model: draft.model,
+      data: { cardId: card.id }
     };
   } catch (error) {
     return {
@@ -90,6 +144,26 @@ export async function generateProjectCardDraftAction(projectId: string): Promise
       message: error instanceof Error ? error.message : "生成项目卡片草稿失败，请稍后再试。"
     };
   }
+}
+
+/** 按 id 查询用户的一条项目材料（供组合选择用）。 */
+async function sqlQueryMaterial(userId: string, materialId: string) {
+  const { neon } = await import("@neondatabase/serverless");
+  const connectionString = (process.env.DATABASE_URL ?? "").replace(/([?&])channel_binding=require(&?)/g, (_m: string, prefix: string, suffix: string) => {
+    if (prefix === "?" && suffix) {
+      return "?";
+    }
+    if (!suffix) {
+      return "";
+    }
+    return prefix;
+  }).replace(/[?&]$/, "");
+  const sql = neon(connectionString);
+  const rows = (await sql.query(
+    `SELECT "id", "projectName", "rawText" FROM "ProjectMaterial" WHERE "id" = $1 AND "clerkUserId" = $2 LIMIT 1`,
+    [materialId, userId]
+  )) as Array<{ id: string; projectName: string | null; rawText: string }>;
+  return rows[0] ? { projectName: rows[0].projectName, rawText: rows[0].rawText } : null;
 }
 
 export async function updateProjectCardAction(values: z.infer<typeof updateProjectCardSchema>): Promise<ActionResult> {
@@ -103,16 +177,7 @@ export async function updateProjectCardAction(values: z.infer<typeof updateProje
   }
 
   const userId = requireClerkUserId();
-  const project = await getWorkspaceProjectById(parsed.data.projectId, userId);
-
-  if (!project) {
-    return {
-      success: false,
-      message: "当前项目不存在，或你无权保存该项目卡片。"
-    };
-  }
-
-  const card = await updateProjectCard(parsed.data.cardId, parsed.data.projectId, userId, parsed.data);
+  const card = await updateProjectCard(parsed.data.cardId, userId, parsed.data);
 
   if (!card) {
     return {
@@ -130,9 +195,15 @@ export async function updateProjectCardAction(values: z.infer<typeof updateProje
   };
 }
 
-export async function saveProjectCardVersionAction(projectId: string): Promise<ActionResult> {
+export async function saveProjectCardVersionAction(projectId: string | null, cardId?: string): Promise<ActionResult> {
   const userId = requireClerkUserId();
-  const card = await getLatestProjectCard(projectId, userId);
+
+  // 优先按 cardId 保存（独立卡片库场景），否则回退项目最新卡片（兼容旧流程）
+  const card = cardId
+    ? await getProjectCardById(cardId, userId)
+    : projectId
+      ? await getLatestProjectCard(projectId, userId)
+      : null;
 
   if (!card) {
     return {
@@ -141,13 +212,21 @@ export async function saveProjectCardVersionAction(projectId: string): Promise<A
     };
   }
 
-  const version = await createProjectCardVersion(projectId, userId, card);
+  const version = await createProjectCardVersion(card.id, userId, card);
 
   revalidatePath("/project-card");
+  revalidatePath("/cards");
 
   return {
     success: true,
     message: `项目卡片版本已保存：${version.title}`,
     savedAt: version.createdAt.toISOString()
   };
+}
+
+/** 按 id 查询用户的一张项目卡片。 */
+async function getProjectCardById(cardId: string, userId: string) {
+  const { listProjectCards } = await import("@/lib/stage7-data");
+  const cards = await listProjectCards(userId);
+  return cards.find((card) => card.id === cardId) ?? null;
 }
