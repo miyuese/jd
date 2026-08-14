@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   generateCapabilitySummaryAction,
   generateMatchAnalysisAction,
+  getMatchAnalysisVersionDetailAction,
   saveJdRecordAction,
   saveMatchAnalysisVersionAction,
   updateMatchAnalysisAction
@@ -154,8 +155,10 @@ export function JdAnalysisWorkspace({
   const [summaryError, setSummaryError] = useState("");
   const [analysisMessage, setAnalysisMessage] = useState(matchAnalysis ? "当前求职计划已有匹配分析草稿，可以继续确认表达重点。" : "还没有匹配分析草稿。先生成 JD 摘要，再开始匹配分析。");
   const [analysisError, setAnalysisError] = useState("");
-  const [versionMessage, setVersionMessage] = useState(versions.length > 0 ? "下方展示的是已保存的匹配分析版本。" : "当前还没有保存过匹配分析版本。");
+  const [versionMessage, setVersionMessage] = useState(versions.length > 0 ? "下方展示的是已保存的匹配分析版本，点击可查看当时内容。" : "当前还没有保存过匹配分析版本。");
   const [versionError, setVersionError] = useState("");
+  const [selectedVersion, setSelectedVersion] = useState<{ id: string; title: string; createdAt: string; content: unknown } | null>(null);
+  const [isLoadingVersion, startLoadingVersion] = useTransition();
   const [responseModel, setResponseModel] = useState("");
   const [latestJdSavedAt, setLatestJdSavedAt] = useState<string | null>(jdSavedAt);
   const [analysisForm, setAnalysisForm] = useState(
@@ -329,6 +332,26 @@ export function JdAnalysisWorkspace({
     });
   };
 
+  const handleViewVersion = (versionId: string) => {
+    setVersionError("");
+
+    startLoadingVersion(async () => {
+      const result = await getMatchAnalysisVersionDetailAction(versionId);
+
+      if (!result.success) {
+        setVersionError(result.message);
+        return;
+      }
+
+      setSelectedVersion({
+        id: versionId,
+        title: result.title,
+        createdAt: result.createdAt,
+        content: result.content
+      });
+    });
+  };
+
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
@@ -424,12 +447,85 @@ export function JdAnalysisWorkspace({
 
             {versions.length > 0 ? (
               <div className="mt-5 space-y-3">
-                {versions.slice(0, 4).map((version) => (
-                  <div key={version.id} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-600">
-                    <div className="font-medium text-slate-900">{version.title}</div>
+                {versions.slice(0, 6).map((version) => (
+                  <button
+                    key={version.id}
+                    type="button"
+                    onClick={() => handleViewVersion(version.id)}
+                    className={`w-full rounded-2xl px-4 py-3 text-left text-sm leading-7 transition ${
+                      selectedVersion?.id === version.id
+                        ? "border border-sky-300 bg-sky-50"
+                        : "bg-slate-50 hover:border hover:border-sky-200 hover:bg-sky-50/60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-slate-900">{version.title}</div>
+                      <span className="shrink-0 text-xs text-sky-600">查看</span>
+                    </div>
                     <div className="text-xs text-slate-500">{formatDateTime(version.createdAt)}</div>
-                  </div>
+                  </button>
                 ))}
+              </div>
+            ) : null}
+
+            {isLoadingVersion ? (
+              <div className="mt-4 text-xs text-slate-500">正在加载版本详情...</div>
+            ) : null}
+
+            {selectedVersion ? (
+              <div className="mt-4 rounded-2xl border border-sky-100 bg-white p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-slate-500">版本详情</div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVersion(null)}
+                    className="rounded-full px-2 py-0.5 text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    收起
+                  </button>
+                </div>
+                <div className="mt-3 max-h-[360px] space-y-3 overflow-y-auto">
+                  {(() => {
+                    const content = selectedVersion.content as {
+                      matchedPoints?: string[] | unknown;
+                      gapPoints?: string[] | unknown;
+                      suggestionPoints?: string[] | unknown;
+                      summary?: string;
+                      status?: string;
+                    } | null;
+
+                    if (!content || typeof content !== "object") {
+                      return <div className="text-xs leading-6 text-slate-500">无内容</div>;
+                    }
+
+                    const toItems = (value: unknown) => {
+                      if (Array.isArray(value)) return value;
+                      if (typeof value === "object" && value !== null) {
+                        const record = value as { items?: unknown };
+                        return Array.isArray(record.items) ? record.items : [];
+                      }
+                      return [];
+                    };
+
+                    const sections: Array<{ label: string; value: unknown }> = [
+                      { label: "匹配点", value: toItems(content.matchedPoints) },
+                      { label: "差距点", value: toItems(content.gapPoints) },
+                      { label: "补充建议", value: toItems(content.suggestionPoints) },
+                      { label: "匹配总结", value: content.summary ?? "" }
+                    ];
+
+                    return sections.map((section) => (
+                      <div key={section.label} className="rounded-xl bg-slate-50 p-3">
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{section.label}</div>
+                        <div className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-700">
+                          {Array.isArray(section.value)
+                            ? (section.value as string[]).map((item) => `• ${item}`).join("\n")
+                            : String(section.value) || "（空）"}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             ) : null}
           </div>

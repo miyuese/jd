@@ -41,7 +41,10 @@ async function getInterviewInputs(projectId: string, userId: string, jdId?: stri
   }
 
   if (!matchAnalysis) {
-    throw new Error("请先完成 JD 匹配分析，再开始生成面试内容。");
+    if (jdId) {
+      throw new Error("当前选中的 JD 还没有匹配分析。请先到 JD 分析页，选中这条 JD 完成「解析 JD」和「开始匹配分析」两步，再回到这里生成面试内容。");
+    }
+    throw new Error("请先到 JD 分析页完成匹配分析，再开始生成面试内容。");
   }
 
   return {

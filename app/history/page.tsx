@@ -16,9 +16,10 @@ export default async function HistoryPage({
   searchParams?: { projectId?: string | string[]; cardId?: string | string[]; jdId?: string | string[] };
 }) {
   const userId = requireClerkUserId();
-  const [projectsWithVersions, allCards] = await Promise.all([
+  const [projectsWithVersions, allCards, allProjects] = await Promise.all([
     listProjectsWithVersions(userId),
-    listProjectCards(userId)
+    listProjectCards(userId),
+    listWorkspaceProjects(userId)
   ]);
 
   const requestedProjectId = Array.isArray(searchParams?.projectId)
@@ -58,6 +59,7 @@ export default async function HistoryPage({
         versionCount: p.versionCount
       }))}
       selectedProjectId={selectedProjectId}
+      allProjectCount={allProjects.length}
       cards={allCards.map((card) => ({
         id: card.id,
         title: card.title ?? "未命名卡片"

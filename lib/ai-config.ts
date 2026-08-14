@@ -143,10 +143,15 @@ export async function generateStructuredJson<T>(
   const retries = options.extraRetries ?? 1;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    // 重试时自动放大 token 预算（×1.5 递增）：
+    // 推理模型（如 deepseek-v4-flash）的 reasoning_content 会占用 max_tokens 总预算，
+    // 思考过长会把最终答案挤成空字符串。第一次失败后放宽预算，给"思考 + 答案"留足空间。
+    const attemptTokens = Math.round(options.maxOutputTokens * Math.pow(1.5, attempt));
+
     const result = await generateTextRobust({
       system: options.system,
       prompt: options.prompt,
-      maxOutputTokens: options.maxOutputTokens,
+      maxOutputTokens: attemptTokens,
       ...(options.temperature !== undefined ? { temperature: options.temperature } : {})
     });
 
@@ -245,7 +250,7 @@ export async function generateInterviewQuestions(input: {
     system:
       "你是一个求职项目复盘教练。你要根据项目原始材料，输出采访式追问，帮助用户把真实经历讲清楚。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成首轮采访问题。\n\n项目名称：${input.projectName}\n目标岗位：${input.targetRole}\n当前需求：${input.currentNeed}\n项目原始材料：${input.materialText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"questions":["问题1","问题2","问题3"]}。\n3. 生成 3 到 5 条中文问题。\n4. 问题要具体，优先追问项目背景、职责、关键动作、判断依据、结果指标和协作细节。\n5. 不要输出空泛鼓励语，不要重复。`,
-    maxOutputTokens: 800,
+    maxOutputTokens: 2000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;
@@ -314,7 +319,7 @@ export async function generateProjectCardDraft(input: {
     system:
       "你是一个求职项目复盘教练。你要把项目原始材料和复盘问答整理成结构化项目卡片草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成项目卡片草稿。\n\n项目名称：${input.projectName}\n目标岗位：${input.targetRole}\n当前需求：${input.currentNeed}\n\n项目材料（每份材料标注了所属项目，严禁把 A 项目的事实写到 B 项目的表述中）：\n${materialsText || "（暂无材料）"}\n\n已保存问答：\n${qaText}${confirmedInstruction}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"title":"...","background":"...","responsibility":"...","result":"..."}。\n3. 所有字段都必须有内容，使用简体中文。\n4. background 聚焦项目背景、目标和问题场景。\n5. responsibility 聚焦你的职责、关键动作和决策。\n6. result 聚焦结果、效果、指标或价值。\n7. 引用多份材料时，每段表述必须归属到对应项目名，禁止跨项目混用事实。\n8. 不要编造明显超出材料的信息，不确定的地方宁可保持保守表达。`,
-    maxOutputTokens: 2000,
+    maxOutputTokens: 5000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;
@@ -352,7 +357,7 @@ export async function generateJdCapabilitySummary(input: { rawText: string }) {
     system:
       "你是一个岗位分析助手。你要把 JD 原文提炼成结构化岗位能力摘要。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面的 JD 原文，输出岗位能力摘要。\n\nJD 原文：${input.rawText}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"responsibilities":[...],"capabilities":[...],"priorities":[{"label":"...","level":"high|medium|low"}]}。\n3. responsibilities 输出 3 到 5 条岗位职责重点。\n4. capabilities 输出 4 到 8 个能力关键词。\n5. priorities 输出 3 到 5 条优先级判断。\n6. 使用简体中文。`,
-    maxOutputTokens: 1200,
+    maxOutputTokens: 2500,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;
@@ -423,7 +428,7 @@ export async function generateMatchAnalysisDraft(input: {
       "你是一个求职匹配分析助手。你要基于项目卡片和 JD 能力摘要，输出结构化匹配分析草稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成一版新的 JD 匹配分析草稿。\n\n本次生成批次：${generationBatch}\n请不要照搬上一版表达，优先换一个分析角度、换一组措辞和排序，但必须保持事实真实，不要编造项目事实。\n\n项目事实：\n${projectFactDigest}\n\nJD 职责重点：${input.capabilitySummary.responsibilities.join("；")}\nJD 能力关键词：${input.capabilitySummary.capabilities.join("；")}\nJD 优先级：${input.capabilitySummary.priorities.map((item) => `${item.label}(${item.level})`).join("；")}\n\n输出要求：\n1. 只输出合法 JSON，不要输出 Markdown，不要输出代码块，不要输出解释性前后缀。\n2. 顶层 JSON 必须包含且优先只包含这 4 个字段：{"matchedPoints":[],"gapPoints":[],"suggestionPoints":[],"summary":""}。\n3. matchedPoints、gapPoints、suggestionPoints 每个数组必须恰好 3 条，避免输出过长导致 JSON 被截断。\n4. 数组里的每一项可以是字符串，也可以是对象；更推荐对象格式：{"point":"一句明确结论","evidence":"来自项目事实或 JD 要求的具体证据"}。\n5. 如果使用对象格式，每个 point 控制在 45 个汉字以内，每个 evidence 控制在 70 个汉字以内；不要写长段落。\n6. matchedPoints 写"项目与 JD 的强匹配点"，每条说明匹配了 JD 的哪个职责、能力或优先级，并引用项目中的具体动作、模块、结果或决策。\n7. gapPoints 写"当前表达或证据上的缺口"，优先写表达缺口、证据缺口、量化缺口，不要简单判断用户能力不足。\n8. suggestionPoints 写"下一步可执行建议"，必须能直接指导简历改写或面试表达，每条建议要具体到怎么改、补什么证据、强化哪个角度。\n9. summary 必须是 2 到 3 句中文总结，说明整体匹配度、最值得主打的亮点、最需要补强的短板。\n10. 不要使用空数组，不要返回 null，不要把 JSON 字段名翻译成中文。\n11. 使用简体中文，表达具体、克制、可信，不要空泛套话。`,
     temperature: 0.8,
-    maxOutputTokens: 3000,
+    maxOutputTokens: 4000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;
@@ -674,7 +679,7 @@ export async function generateResumeFragmentRewrite(input: {
     system:
       "你是一个简历片段改写助手。你要在保留原始事实的前提下，只重写用户选中的那一段文本。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请只重写用户选中的简历片段。\n\n改写策略：${input.rewriteMode}\n\n整份简历上下文：${input.fullResumeText}\n\n用户选中的原文片段：${input.selectedText}\n\n项目卡片标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"rewrite":"...","reasoning":"..."}。\n3. rewrite 只能针对“用户选中的原文片段”进行重写，不要重写整份简历。\n4. rewrite 要结合整份简历上下文，避免前后文风格完全断裂。\n5. 保持事实真实，不要编造。\n6. 使用简体中文，保持简历项目描述语气。`,
-    maxOutputTokens: 2000,
+    maxOutputTokens: 3000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;
@@ -722,7 +727,7 @@ async function generateInterviewScript(input: {
     system:
       "你是一个面试表达助手。你要把项目事实和岗位匹配重点转成口语化项目讲稿。你必须只返回 JSON，不要输出解释、标题或 Markdown 代码块。",
     prompt: `请基于下面信息生成项目讲稿。\n\n时长要求：${durationInstruction}\n\n项目标题：${input.projectCard.title}\n项目背景：${input.projectCard.background}\n核心职责：${input.projectCard.responsibility}\n项目结果：${input.projectCard.result}\n\n匹配点：${input.matchAnalysis.matchedPoints.join("；")}\n差距点：${input.matchAnalysis.gapPoints.join("；")}\n补充建议：${input.matchAnalysis.suggestionPoints.join("；")}\n匹配总结：${input.matchAnalysis.summary}\n\n输出要求：\n1. 只输出 JSON。\n2. 格式必须是 {"script":"...","highlights":[...]}。\n3. script 必须是口语化表达，不要写成简历 bullet，也不要写成分析报告。\n4. highlights 输出 2 到 4 条，说明这版讲稿重点抓了什么。\n5. 使用简体中文。`,
-    maxOutputTokens: input.duration === "1-minute" ? 2000 : 3000,
+    maxOutputTokens: input.duration === "1-minute" ? 3000 : 4000,
     validate: (parsed) => {
       if (typeof parsed !== "object" || parsed === null) {
         return false;

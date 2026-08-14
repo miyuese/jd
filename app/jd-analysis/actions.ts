@@ -6,6 +6,7 @@ import { requireClerkUserId } from "@/lib/auth-scope";
 import { generateJdCapabilitySummary, generateMatchAnalysisDraft, generatePlainMatchAnalysisExplanations } from "@/lib/ai-config";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
 import { getLatestProjectCard } from "@/lib/stage7-data";
+import { getVersionById } from "@/lib/stage11-data";
 import {
   createMatchAnalysisVersion,
   getJdRecordById,
@@ -181,12 +182,17 @@ export async function generateMatchAnalysisAction(projectId: string, jdId?: stri
       plainExplanations
     }, projectCard.id);
 
+    // 自动写入版本快照（与简历改写/面试输出对齐）：AI 产出一份分析就留一份历史，
+    // 保证历史版本页能看到，避免"生成过但历史页空"的困惑
+    stage = "写入匹配分析版本快照";
+    await createMatchAnalysisVersion(projectId, userId, saved);
+
     stage = "刷新 JD 分析页面缓存";
     revalidatePath("/jd-analysis");
 
     return {
       success: true,
-      message: "匹配分析草稿已生成，可以继续确认表达重点。",
+      message: "匹配分析草稿已生成并保存版本，可以继续确认表达重点。",
       savedAt: saved.updatedAt.toISOString(),
       model: analysis.model,
       data: { matchAnalysisId: saved.id }
@@ -261,12 +267,17 @@ export async function updateMatchAnalysisAction(values: z.infer<typeof updateMat
       };
     }
 
+    // 统一保存语义：保存草稿的同时写入版本快照（与左侧「保存匹配分析版本」行为一致，
+    // 保证历史记录可回看，避免"保存成功但左侧版本列表无记录"的困惑）
+    stage = "写入匹配分析版本快照";
+    await createMatchAnalysisVersion(parsed.data.projectId, userId, updated);
+
     stage = "刷新 JD 分析页面缓存";
     revalidatePath("/jd-analysis");
 
     return {
       success: true,
-      message: "匹配分析已更新，当前确认结果已保存。",
+      message: "匹配分析已更新并保存版本，可以在左侧版本列表查看历史快照。",
       savedAt: updated.updatedAt.toISOString()
     };
   } catch (error) {
@@ -330,4 +341,23 @@ export async function saveMatchAnalysisVersionAction(
       message: `保存匹配分析版本失败（${stage}）：${error instanceof Error ? error.message : String(error)}`
     };
   }
+}
+
+/** 读取匹配分析版本详情（供左侧版本列表点击查看历史快照）。 */
+export async function getMatchAnalysisVersionDetailAction(
+  versionId: string
+): Promise<{ success: true; title: string; createdAt: string; content: unknown } | { success: false; message: string }> {
+  const userId = requireClerkUserId();
+  const version = await getVersionById(versionId, userId);
+
+  if (!version) {
+    return { success: false, message: "未找到该版本记录，或你无权访问。" };
+  }
+
+  return {
+    success: true,
+    title: version.title,
+    createdAt: version.createdAt.toISOString(),
+    content: version.content
+  };
 }

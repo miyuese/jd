@@ -3,10 +3,9 @@ import { InterviewPrepWorkspace } from "@/components/interview-prep-workspace";
 import { requireClerkUserId } from "@/lib/auth-scope";
 import { listWorkspaceProjects } from "@/lib/neon-db";
 import { getLatestProjectCard, listProjectCards } from "@/lib/stage7-data";
-import { getLatestMatchAnalysis } from "@/lib/stage8-data";
+import { getMatchAnalysisByJdRecord, getLatestJdRecord, listJdRecords } from "@/lib/stage8-data";
 import { listInterviewOutputVersions } from "@/lib/stage10-data";
 import { listAbilityGaps } from "@/lib/memory-data";
-import { getLatestJdRecord, listJdRecords } from "@/lib/stage8-data";
 
 export const metadata: Metadata = {
   title: "面试准备"
@@ -78,9 +77,8 @@ export default async function InterviewPrepPage({
     );
   }
 
-  const [projectCard, matchAnalysis, jdRecords, latestJd] = await Promise.all([
+  const [projectCard, jdRecords, latestJd] = await Promise.all([
     getLatestProjectCard(selectedProjectId, userId),
-    getLatestMatchAnalysis(selectedProjectId, userId),
     listJdRecords(selectedProjectId, userId),
     getLatestJdRecord(selectedProjectId, userId)
   ]);
@@ -93,6 +91,18 @@ export default async function InterviewPrepPage({
   const selectedCardId = allCards.some((card) => card.id === requestedCardId)
     ? requestedCardId ?? null
     : (projectCard?.id ?? null);
+
+  // 按选中的卡片 × JD 交叉点读取匹配分析（状态灯与生成逻辑一致，不再用"整个计划有没有"粗判断）
+  const crossMatchAnalysis = selectedJdId
+    ? await getMatchAnalysisByJdRecord(selectedJdId, userId, selectedCardId)
+    : null;
+
+  // 每条 JD 是否已有匹配分析（用于下拉框三态标签：已解析·有分析 / 已解析·无分析 / 未解析）
+  const jdAnalysisStatus = new Map<string, boolean>();
+  for (const jd of jdRecords) {
+    const exists = await getMatchAnalysisByJdRecord(jd.id, userId, selectedCardId);
+    jdAnalysisStatus.set(jd.id, Boolean(exists));
+  }
 
   // 按选中的卡片 × JD 交叉点读取输出（保证"卡片A×JD1"和"卡片B×JD1"的输出互不串台）
   const crossOutput = await getLatestInterviewOutputs(selectedProjectId, userId, selectedCardId, selectedJdId);
@@ -110,6 +120,7 @@ export default async function InterviewPrepPage({
         id: jd.id,
         rawText: jd.rawText,
         hasSummary: Boolean((jd.capabilitySummary as { responsibilities?: unknown[] } | null)?.responsibilities?.length),
+        hasAnalysis: jdAnalysisStatus.get(jd.id) ?? false,
         updatedAt: jd.updatedAt.toISOString()
       }))}
       selectedJdId={selectedJdId}
@@ -120,7 +131,7 @@ export default async function InterviewPrepPage({
       }))}
       selectedCardId={selectedCardId}
       projectCardExists={Boolean(projectCard)}
-      matchAnalysisExists={Boolean(matchAnalysis)}
+      matchAnalysisExists={Boolean(crossMatchAnalysis)}
       latestOutput={crossOutput}
       initialAbilityGaps={serializedGaps}
     />

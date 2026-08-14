@@ -238,16 +238,52 @@ export async function getMatchAnalysisByJdRecord(jdRecordId: string, clerkUserId
   }
 
   const sql = getSql();
+
+  // 第一优先：卡片 × JD 交叉点精确匹配（新数据）
+  if (projectCardId) {
+    const crossRows = (await sql.query(
+      `
+        SELECT "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+        FROM "MatchAnalysis"
+        WHERE "jdRecordId" = $1 AND "clerkUserId" = $2 AND "projectCardId" = $3
+        ORDER BY "updatedAt" DESC
+        LIMIT 1
+      `,
+      [jdRecordId, clerkUserId, projectCardId]
+    )) as MatchAnalysisRow[];
+
+    if (crossRows[0]) {
+      return mapMatchAnalysis(crossRows[0]);
+    }
+
+    // 兼容旧数据：该 JD 下存在未关联卡片（projectCardId 为空）的匹配分析时回退使用
+    // （V2 之前的分析没有卡片维度，直接使用避免"明明做过分析却报未完成"）
+    const legacyRows = (await sql.query(
+      `
+        SELECT "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+        FROM "MatchAnalysis"
+        WHERE "jdRecordId" = $1 AND "clerkUserId" = $2 AND "projectCardId" IS NULL
+        ORDER BY "updatedAt" DESC
+        LIMIT 1
+      `,
+      [jdRecordId, clerkUserId]
+    )) as MatchAnalysisRow[];
+
+    if (legacyRows[0]) {
+      return mapMatchAnalysis(legacyRows[0]);
+    }
+  }
+
+  // 兜底：按 JD 查任意分析（不限定卡片）
   const rows = (await sql.query(
     `
       SELECT "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
       FROM "MatchAnalysis"
       WHERE "jdRecordId" = $1 AND "clerkUserId" = $2
-        AND (($3::text IS NULL AND "projectCardId" IS NULL) OR "projectCardId" = $3)
       ORDER BY "updatedAt" DESC
       LIMIT 1
     `,
-    [jdRecordId, clerkUserId, projectCardId ?? null]
+    [jdRecordId, clerkUserId]
   )) as MatchAnalysisRow[];
 
   return rows[0] ? mapMatchAnalysis(rows[0]) : null;
@@ -343,7 +379,7 @@ export async function updateMatchAnalysis(
           "status" = $5,
           "updatedAt" = NOW()
       WHERE "id" = $6 AND "projectId" = $7 AND "clerkUserId" = $8
-      RETURNING "id", "projectId", "jdRecordId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
+      RETURNING "id", "projectId", "jdRecordId", "projectCardId", "clerkUserId", "status", "matchedPoints", "gapPoints", "suggestionPoints", "summary", "createdAt", "updatedAt"
     `,
     [matchedPointsPayload, gapPointsPayload, suggestionPointsPayload, values.summary, values.status, matchAnalysisId, projectId, clerkUserId]
   )) as MatchAnalysisRow[];

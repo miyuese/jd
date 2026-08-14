@@ -27,7 +27,7 @@ type ProjectOption = {
 type InterviewPrepWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
-  jdRecords: Array<{ id: string; rawText: string; hasSummary: boolean; updatedAt: string }>;
+  jdRecords: Array<{ id: string; rawText: string; hasSummary: boolean; hasAnalysis: boolean; updatedAt: string }>;
   selectedJdId: string | null;
   cards: Array<{ id: string; title: string; updatedAt: string }>;
   selectedCardId: string | null;
@@ -294,7 +294,7 @@ export function InterviewPrepWorkspace({
               >
                 {jdRecords.map((jd, index) => (
                   <option key={jd.id} value={jd.id}>
-                    目标 JD #{jdRecords.length - index} · {jd.hasSummary ? "已解析" : "未解析"}
+                    目标 JD #{jdRecords.length - index} · {!jd.hasSummary ? "未解析" : jd.hasAnalysis ? "已解析 · 有分析" : "已解析 · 无分析"}
                   </option>
                 ))}
               </select>

@@ -40,6 +40,7 @@ type JdOption = {
 type HistoryWorkspaceProps = {
   projects: ProjectOption[];
   selectedProjectId: string | null;
+  allProjectCount: number;
   cards: CardOption[];
   selectedCardId: string | null;
   jdRecords: JdOption[];
@@ -117,6 +118,7 @@ function getContentPreview(content: unknown): string {
 export function HistoryWorkspace({
   projects,
   selectedProjectId,
+  allProjectCount,
   cards,
   selectedCardId,
   jdRecords,
@@ -207,11 +209,15 @@ export function HistoryWorkspace({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             }
-            title="还没有版本记录"
-            description="创建求职计划并完成项目卡片确认、匹配分析或简历改写后，版本记录会自动出现在这里。"
+            title={allProjectCount > 0 ? "还没有 AI 产物版本" : "还没有求职计划"}
+            description={
+              allProjectCount > 0
+                ? "你已有求职计划，但还没有 AI 产物。完成项目卡片确认、JD 匹配分析或简历改写后，AI 产出的内容会自动存档到历史版本。"
+                : "创建求职计划并录入素材后，完成项目卡片、匹配分析或简历改写，AI 产物会自动存档在这里。"
+            }
             action={{
-              label: "前往工作台",
-              href: "/workspace"
+              label: allProjectCount > 0 ? "前往 JD 分析页" : "前往工作台",
+              href: allProjectCount > 0 ? "/jd-analysis" : "/workspace"
             }}
           />
         </div>
