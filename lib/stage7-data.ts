@@ -46,6 +46,7 @@ type ProjectCardRow = {
   resultFactStatus: string;
   status: string;
   resumeMaterialId: string | null;
+  isCurrentProjectCard: boolean;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -70,6 +71,7 @@ function mapProjectCard(row: ProjectCardRow) {
     resultFactStatus: row.resultFactStatus,
     status: row.status,
     resumeMaterialId: row.resumeMaterialId,
+    isCurrentProjectCard: row.isCurrentProjectCard,
     createdAt: new Date(row.createdAt),
     updatedAt: new Date(row.updatedAt)
   };
@@ -89,10 +91,10 @@ export async function getLatestProjectCard(projectId: string, clerkUserId: strin
     `
       SELECT "id", "projectId", "clerkUserId", "title", "background", "backgroundFactStatus",
              "responsibility", "responsibilityFactStatus", "result", "resultFactStatus",
-             "status", "resumeMaterialId", "createdAt", "updatedAt"
+             "status", "resumeMaterialId", "isCurrentProjectCard", "createdAt", "updatedAt"
       FROM "ProjectCard"
       WHERE "projectId" = $1 AND "clerkUserId" = $2
-      ORDER BY "updatedAt" DESC
+      ORDER BY "isCurrentProjectCard" DESC, "updatedAt" DESC
       LIMIT 1
     `,
     [projectId, clerkUserId]
@@ -108,10 +110,10 @@ export async function listProjectCards(clerkUserId: string) {
     `
       SELECT "id", "projectId", "clerkUserId", "title", "background", "backgroundFactStatus",
              "responsibility", "responsibilityFactStatus", "result", "resultFactStatus",
-             "status", "resumeMaterialId", "createdAt", "updatedAt"
+             "status", "resumeMaterialId", "isCurrentProjectCard", "createdAt", "updatedAt"
       FROM "ProjectCard"
       WHERE "clerkUserId" = $1
-      ORDER BY "updatedAt" DESC
+      ORDER BY "isCurrentProjectCard" DESC, "updatedAt" DESC
     `,
     [clerkUserId]
   )) as ProjectCardRow[];
@@ -159,16 +161,16 @@ export async function saveGeneratedProjectCard(
       INSERT INTO "ProjectCard" (
         "id", "projectId", "clerkUserId", "title", "background", "backgroundFactStatus",
         "responsibility", "responsibilityFactStatus", "result", "resultFactStatus",
-        "status", "resumeMaterialId", "createdAt", "updatedAt"
+        "status", "resumeMaterialId", "isCurrentProjectCard", "createdAt", "updatedAt"
       )
       VALUES (
         $1, $2, $3, $4, $5, 'NEEDS_CONFIRMATION',
         $6, 'NEEDS_CONFIRMATION', $7, 'NEEDS_CONFIRMATION',
-        'PENDING_CONFIRMATION', $8, NOW(), NOW()
+        'PENDING_CONFIRMATION', $8, false, NOW(), NOW()
       )
       RETURNING "id", "projectId", "clerkUserId", "title", "background", "backgroundFactStatus",
                 "responsibility", "responsibilityFactStatus", "result", "resultFactStatus",
-                "status", "resumeMaterialId", "createdAt", "updatedAt"
+                "status", "resumeMaterialId", "isCurrentProjectCard", "createdAt", "updatedAt"
     `,
     [cardId, options.projectId ?? null, clerkUserId, values.title, values.background, values.responsibility, values.result, options.resumeMaterialId ?? null]
   )) as ProjectCardRow[];
@@ -220,7 +222,7 @@ export async function updateProjectCard(
       WHERE "id" = $9 AND "clerkUserId" = $10
       RETURNING "id", "projectId", "clerkUserId", "title", "background", "backgroundFactStatus",
                 "responsibility", "responsibilityFactStatus", "result", "resultFactStatus",
-                "status", "resumeMaterialId", "createdAt", "updatedAt"
+                "status", "resumeMaterialId", "isCurrentProjectCard", "createdAt", "updatedAt"
     `,
     [
       values.title,
@@ -246,6 +248,7 @@ export async function createProjectCardVersion(
 ) {
   const sql = getSql();
   const title = `${card.title || "项目卡片"} · ${new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -270,7 +273,7 @@ export async function createProjectCardVersion(
       VALUES ($1, $2, $3, 'PROJECT_CARD', $4, $5::jsonb, $6, NOW())
       RETURNING "id", "title", "createdAt"
     `,
-    [randomUUID(), card.projectId, clerkUserId, title, content, card.id]
+    [randomUUID(), card.projectId, clerkUserId, title, content, card.id || null]
   )) as VersionRecordRow[];
 
   return mapVersion(rows[0]);
@@ -309,4 +312,45 @@ export async function listProjectCardVersions(projectId: string | null, clerkUse
   )) as VersionRecordRow[];
 
   return rows.map(mapVersion);
+}
+
+/** 设置某张卡片为「当前最终版本」：同维度（projectId 相同，含未关联计划的独立卡片）下唯一标记。 */
+export async function setCurrentProjectCard(cardId: string, clerkUserId: string, projectId: string | null) {
+  const sql = getSql();
+
+  // 先把同维度下所有卡片标记清除（projectId 为 null 时按 IS NULL 处理）
+  if (projectId) {
+    await sql.query(
+      `
+        UPDATE "ProjectCard"
+        SET "isCurrentProjectCard" = false
+        WHERE "clerkUserId" = $1 AND "projectId" = $2
+      `,
+      [clerkUserId, projectId]
+    );
+  } else {
+    await sql.query(
+      `
+        UPDATE "ProjectCard"
+        SET "isCurrentProjectCard" = false
+        WHERE "clerkUserId" = $1 AND "projectId" IS NULL
+      `,
+      [clerkUserId]
+    );
+  }
+
+  // 再标记目标卡片
+  const rows = (await sql.query(
+    `
+      UPDATE "ProjectCard"
+      SET "isCurrentProjectCard" = true, "updatedAt" = NOW()
+      WHERE "id" = $1 AND "clerkUserId" = $2
+      RETURNING "id", "projectId", "clerkUserId", "title", "background", "backgroundFactStatus",
+                "responsibility", "responsibilityFactStatus", "result", "resultFactStatus",
+                "status", "resumeMaterialId", "isCurrentProjectCard", "createdAt", "updatedAt"
+    `,
+    [cardId, clerkUserId]
+  )) as ProjectCardRow[];
+
+  return rows[0] ? mapProjectCard(rows[0]) : null;
 }

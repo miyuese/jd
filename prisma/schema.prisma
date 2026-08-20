@@ -118,6 +118,7 @@ model ProjectCard {
   resultFactStatus         FactStatus        @default(NEEDS_CONFIRMATION)
   status                   ProjectCardStatus @default(PENDING_CONFIRMATION)
   resumeMaterialId         String?
+  isCurrentProjectCard     Boolean           @default(false)
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
   project                  Project?          @relation(fields: [projectId], references: [id], onDelete: Cascade)

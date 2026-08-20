@@ -11,6 +11,7 @@ import {
   saveMatchAnalysisVersionAction,
   updateMatchAnalysisAction
 } from "@/app/jd-analysis/actions";
+import { deleteVersionAction } from "@/app/history/actions";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-storage";
 import { GeneratingIndicator } from "@/components/generating-indicator";
 
@@ -320,7 +321,24 @@ export function JdAnalysisWorkspace({
     setVersionError("");
 
     startSavingVersion(async () => {
-      const result = await saveMatchAnalysisVersionAction(selectedProjectId, selectedJdId ?? undefined, selectedCardId ?? undefined);
+      // 用前端当前编辑内容保存版本：先落草稿，再生成快照，保证版本 = 此刻看到的内容
+      const result = await saveMatchAnalysisVersionAction(selectedProjectId, {
+        jdId: selectedJdId ?? undefined,
+        cardId: selectedCardId ?? undefined,
+        content: analysisForm
+          ? {
+              matchAnalysisId: analysisForm.id,
+              matchedPoints: splitLines(analysisForm.matchedPoints),
+              gapPoints: splitLines(analysisForm.gapPoints),
+              suggestionPoints: splitLines(analysisForm.suggestionPoints),
+              plainMatchedPoints: analysisForm.plainMatchedPoints,
+              plainGapPoints: analysisForm.plainGapPoints,
+              plainSuggestionPoints: analysisForm.plainSuggestionPoints,
+              summary: analysisForm.summary,
+              status: analysisForm.status
+            }
+          : undefined
+      });
 
       if (!result.success) {
         setVersionError(result.message);
@@ -349,6 +367,30 @@ export function JdAnalysisWorkspace({
         createdAt: result.createdAt,
         content: result.content
       });
+    });
+  };
+
+  const handleDeleteVersion = (versionId: string) => {
+    if (!window.confirm("确定删除该版本？删除后不可恢复。")) {
+      return;
+    }
+
+    setVersionError("");
+
+    startSavingVersion(async () => {
+      const result = await deleteVersionAction(versionId);
+
+      if (!result.success) {
+        setVersionError(result.message);
+        return;
+      }
+
+      if (selectedVersion?.id === versionId) {
+        setSelectedVersion(null);
+      }
+
+      setVersionMessage(result.message);
+      router.refresh();
     });
   };
 
@@ -447,12 +489,18 @@ export function JdAnalysisWorkspace({
 
             {versions.length > 0 ? (
               <div className="mt-5 space-y-3">
-                {versions.slice(0, 6).map((version) => (
-                  <button
+                {versions.map((version) => (
+                  <div
                     key={version.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleViewVersion(version.id)}
-                    className={`w-full rounded-2xl px-4 py-3 text-left text-sm leading-7 transition ${
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        handleViewVersion(version.id);
+                      }
+                    }}
+                    className={`w-full cursor-pointer rounded-2xl px-4 py-3 text-left text-sm leading-7 transition ${
                       selectedVersion?.id === version.id
                         ? "border border-sky-300 bg-sky-50"
                         : "bg-slate-50 hover:border hover:border-sky-200 hover:bg-sky-50/60"
@@ -460,10 +508,22 @@ export function JdAnalysisWorkspace({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-medium text-slate-900">{version.title}</div>
-                      <span className="shrink-0 text-xs text-sky-600">查看</span>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="text-xs text-sky-600">查看</span>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteVersion(version.id);
+                          }}
+                          className="text-xs text-red-500 transition hover:text-red-700"
+                        >
+                          删除
+                        </button>
+                      </div>
                     </div>
                     <div className="text-xs text-slate-500">{formatDateTime(version.createdAt)}</div>
-                  </button>
+                  </div>
                 ))}
               </div>
             ) : null}

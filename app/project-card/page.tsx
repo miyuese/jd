@@ -78,6 +78,7 @@ export default async function ProjectCardPage({
           result: libraryCard.result ?? "",
           resultFactStatus: libraryCard.resultFactStatus as "CONFIRMED" | "NEEDS_CONFIRMATION" | "EXPRESSION_SUGGESTION",
           status: libraryCard.status as "DRAFT" | "PENDING_CONFIRMATION" | "CONFIRMED",
+          isCurrentProjectCard: libraryCard.isCurrentProjectCard,
           updatedAt: libraryCard.updatedAt.toISOString()
         }}
         projectMaterialExists={false}
@@ -139,6 +140,7 @@ export default async function ProjectCardPage({
               result: card.result ?? "",
               resultFactStatus: card.resultFactStatus as "CONFIRMED" | "NEEDS_CONFIRMATION" | "EXPRESSION_SUGGESTION",
               status: card.status as "DRAFT" | "PENDING_CONFIRMATION" | "CONFIRMED",
+              isCurrentProjectCard: card.isCurrentProjectCard,
               updatedAt: card.updatedAt.toISOString()
             }
           : null

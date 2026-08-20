@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { getProjectVersionsAction, restoreVersionAction } from "@/app/history/actions";
+import { deleteVersionAction, getProjectVersionsAction, restoreVersionAction } from "@/app/history/actions";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorDisplay } from "@/components/error-display";
 
@@ -197,6 +197,32 @@ export function HistoryWorkspace({
     });
   };
 
+  const handleDeleteVersion = (versionId: string) => {
+    if (!window.confirm("确定删除该版本？删除后不可恢复。")) {
+      return;
+    }
+
+    setRestoreError("");
+    setRestoreMessage("");
+
+    startRestoring(async () => {
+      const result = await deleteVersionAction(versionId);
+
+      if (!result.success) {
+        setRestoreError(result.message);
+        return;
+      }
+
+      setVersions((current) => current.filter((version) => version.id !== versionId));
+      if (selectedVersion?.id === versionId) {
+        setSelectedVersion(null);
+      }
+
+      setRestoreMessage(result.message);
+      router.refresh();
+    });
+  };
+
   if (projects.length === 0) {
     return (
       <section className="page-card p-6 sm:p-8">
@@ -379,6 +405,16 @@ export function HistoryWorkspace({
                           className="inline-flex items-center justify-center rounded-full bg-primary-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-300"
                         >
                           恢复此版本
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteVersion(version.id);
+                          }}
+                          className="inline-flex items-center justify-center rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50"
+                        >
+                          删除
                         </button>
                       </div>
                     </div>

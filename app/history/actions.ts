@@ -63,6 +63,34 @@ export async function getVersionDetailAction(versionId: string): Promise<Version
   return getVersionById(versionId, userId);
 }
 
+type DeleteResult = { success: true; message: string } | { success: false; message: string };
+
+/** 删除一条版本记录（校验归属后物理删除，三处版本列表共用）。 */
+export async function deleteVersionAction(versionId: string): Promise<DeleteResult> {
+  const userId = requireClerkUserId();
+  const sql = getSql();
+
+  const rows = (await sql.query(
+    `
+      DELETE FROM "VersionRecord"
+      WHERE "id" = $1 AND "clerkUserId" = $2
+      RETURNING "id"
+    `,
+    [versionId, userId]
+  )) as Array<{ id: string }>;
+
+  if (!rows.length) {
+    return { success: false, message: "未找到该版本记录，或你无权删除。" };
+  }
+
+  revalidatePath("/history");
+  revalidatePath("/project-card");
+  revalidatePath("/jd-analysis");
+  revalidatePath("/cards");
+
+  return { success: true, message: "版本已删除。" };
+}
+
 type RestoreResult =
   | { success: true; message: string; redirectTo?: string }
   | { success: false; message: string };

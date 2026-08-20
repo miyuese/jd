@@ -83,7 +83,7 @@ export async function listAllVersions(
 
   // 交叉点模式：按 卡片 + JD 过滤（来源维度，不依赖 projectId）
   if (cross?.projectCardId && cross?.jdRecordId) {
-    const rows = (await sql.query(
+    const crossRows = (await sql.query(
       `
         SELECT "id", "projectId", "type", "title", "content",
                "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "jdRecordId", "createdAt"
@@ -96,7 +96,27 @@ export async function listAllVersions(
       [clerkUserId, cross.projectCardId, cross.jdRecordId]
     )) as VersionRow[];
 
-    return rows.map(mapVersion);
+    // 兼容旧数据：V2 前产物没有卡片维度（sourceProjectCardId 为 null），合并同一 JD 下的旧版本，避免筛选后"看不到"
+    const legacyRows = (await sql.query(
+      `
+        SELECT "id", "projectId", "type", "title", "content",
+               "sourceResumeMaterialId", "sourceProjectCardId", "sourceMatchAnalysisId", "jdRecordId", "createdAt"
+        FROM "VersionRecord"
+        WHERE "clerkUserId" = $1
+          AND "sourceProjectCardId" IS NULL
+          AND "jdRecordId" = $2
+        ORDER BY "createdAt" DESC
+      `,
+      [clerkUserId, cross.jdRecordId]
+    )) as VersionRow[];
+
+    const merged = [...crossRows, ...legacyRows]
+      .map(mapVersion)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    if (merged.length > 0) {
+      return merged;
+    }
+    // 兜底：按项目维度查询（保证列表非空）
   }
 
   if (!projectId) {

@@ -5,14 +5,17 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   generateProjectCardDraftAction,
+  getProjectCardVersionDetailAction,
   saveProjectCardVersionAction,
-  updateProjectCardAction
+  setCurrentProjectCardAction
 } from "@/app/project-card/actions";
+import { deleteVersionAction } from "@/app/history/actions";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-storage";
 import { GeneratingIndicator } from "@/components/generating-indicator";
 
-function draftCardKey(projectId: string | null) {
-  return `jd-helper:draft:card:${projectId ?? "none"}`;
+function draftCardKey(projectId: string | null, cardId: string | null) {
+  // 草稿按卡片隔离：有 cardId 时用卡片维度，避免从卡片库进入时串到其他卡片的草稿
+  return `jd-helper:draft:card:${cardId ?? projectId ?? "none"}`;
 }
 import { EmptyState } from "@/components/empty-state";
 import { ErrorDisplay } from "@/components/error-display";
@@ -37,6 +40,7 @@ type ProjectCardData = {
   result: string;
   resultFactStatus: FactStatus;
   status: CardStatus;
+  isCurrentProjectCard?: boolean;
   updatedAt: string;
 };
 
@@ -110,7 +114,6 @@ export function ProjectCardWorkspace({
 }: ProjectCardWorkspaceProps) {
   const router = useRouter();
   const [isGenerating, startGenerating] = useTransition();
-  const [isSavingCard, startSavingCard] = useTransition();
   const [isSavingVersion, startSavingVersion] = useTransition();
   const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id ?? "");
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(materials.slice(0, 2).map((item) => item.id));
@@ -119,36 +122,34 @@ export function ProjectCardWorkspace({
   );
   const [generateError, setGenerateError] = useState("");
   const [responseModel, setResponseModel] = useState("");
-  const [saveMessage, setSaveMessage] = useState(
-    initialCard ? "当前卡片已加载，可以直接修改后保存。" : "当前还没有项目卡片草稿。"
-  );
-  const [saveError, setSaveError] = useState("");
   const [versionMessage, setVersionMessage] = useState(
-    versions.length > 0 ? "下方展示的是已保存的项目卡片版本。" : "当前还没有保存过项目卡片版本。"
+    versions.length > 0 ? "下方展示的是已保存的项目卡片版本，点击可查看当时内容。" : "当前还没有保存过项目卡片版本。"
   );
   const [versionError, setVersionError] = useState("");
+  const [selectedVersion, setSelectedVersion] = useState<{ id: string; title: string; createdAt: string; content: unknown } | null>(null);
+  const [isLoadingVersion, startLoadingVersion] = useTransition();
+  const [isSettingCurrent, startSettingCurrent] = useTransition();
+  const [currentMessage, setCurrentMessage] = useState("");
   const [formValues, setFormValues] = useState<ProjectCardData | null>(initialCard);
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
 
   useEffect(() => {
     // 优先恢复本地未保存的卡片编辑草稿，否则用服务端数据
-    const savedCard = loadDraft<ProjectCardData>(draftCardKey(selectedProjectId));
+    const savedCard = loadDraft<ProjectCardData>(draftCardKey(selectedProjectId, initialCard?.id ?? null));
     setFormValues(savedCard ?? initialCard);
     setGenerateError("");
-    setSaveError("");
     setVersionError("");
     setResponseModel("");
     setGenerateMessage(
       initialCard ? "当前卡片已有草稿，可以继续确认和修改。" : "先生成项目卡片草稿，再进行事实确认。"
     );
-    setSaveMessage(initialCard ? "当前卡片已加载，可以直接修改后保存。" : "当前还没有项目卡片草稿。");
-    setVersionMessage(versions.length > 0 ? "下方展示的是已保存的项目卡片版本。" : "当前还没有保存过项目卡片版本。");
+    setVersionMessage(versions.length > 0 ? "下方展示的是已保存的项目卡片版本，点击可查看当时内容。" : "当前还没有保存过项目卡片版本。");
   }, [initialCard, versions, selectedProjectId]);
 
   // 卡片内容变化时自动暂存（编辑不丢失）
   useEffect(() => {
     if (formValues) {
-      saveDraft(draftCardKey(selectedProjectId), formValues);
+      saveDraft(draftCardKey(selectedProjectId, formValues.id), formValues);
     }
   }, [formValues, selectedProjectId]);
 
@@ -211,37 +212,6 @@ export function ProjectCardWorkspace({
     });
   };
 
-  const handleSaveCard = () => {
-    if (!formValues) {
-      return;
-    }
-
-    setSaveError("");
-
-    startSavingCard(async () => {
-      const result = await updateProjectCardAction({
-        projectId: selectedProjectId ?? undefined,
-        cardId: formValues.id,
-        title: formValues.title,
-        background: formValues.background,
-        backgroundFactStatus: formValues.backgroundFactStatus,
-        responsibility: formValues.responsibility,
-        responsibilityFactStatus: formValues.responsibilityFactStatus,
-        result: formValues.result,
-        resultFactStatus: formValues.resultFactStatus,
-        status: formValues.status
-      });
-
-      if (!result.success) {
-        setSaveError(result.message);
-        return;
-      }
-
-      setSaveMessage(result.message);
-      router.refresh();
-    });
-  };
-
   const handleSaveVersion = () => {
     if (!formValues) {
       return;
@@ -250,7 +220,20 @@ export function ProjectCardWorkspace({
     setVersionError("");
 
     startSavingVersion(async () => {
-      const result = await saveProjectCardVersionAction(selectedProjectId, formValues.id);
+      // 用前端当前编辑内容保存版本：先落草稿，再生成快照，保证版本 = 此刻看到的卡片
+      const result = await saveProjectCardVersionAction(selectedProjectId, {
+        cardId: formValues.id,
+        content: {
+          title: formValues.title,
+          background: formValues.background,
+          backgroundFactStatus: formValues.backgroundFactStatus,
+          responsibility: formValues.responsibility,
+          responsibilityFactStatus: formValues.responsibilityFactStatus,
+          result: formValues.result,
+          resultFactStatus: formValues.resultFactStatus,
+          status: formValues.status
+        }
+      });
 
       if (!result.success) {
         setVersionError(result.message);
@@ -259,7 +242,71 @@ export function ProjectCardWorkspace({
 
       setVersionMessage(result.message);
       // 已保存为版本，清除本地草稿
-      clearDraft(draftCardKey(selectedProjectId));
+      clearDraft(draftCardKey(selectedProjectId, formValues.id));
+      router.refresh();
+    });
+  };
+
+  const handleViewVersion = (versionId: string) => {
+    setVersionError("");
+
+    startLoadingVersion(async () => {
+      const result = await getProjectCardVersionDetailAction(versionId);
+
+      if (!result.success) {
+        setVersionError(result.message);
+        return;
+      }
+
+      setSelectedVersion({
+        id: versionId,
+        title: result.title,
+        createdAt: result.createdAt,
+        content: result.content
+      });
+    });
+  };
+
+  const handleDeleteVersion = (versionId: string) => {
+    if (!window.confirm("确定删除该版本？删除后不可恢复。")) {
+      return;
+    }
+
+    setVersionError("");
+
+    startSavingVersion(async () => {
+      const result = await deleteVersionAction(versionId);
+
+      if (!result.success) {
+        setVersionError(result.message);
+        return;
+      }
+
+      if (selectedVersion?.id === versionId) {
+        setSelectedVersion(null);
+      }
+
+      setVersionMessage(result.message);
+      router.refresh();
+    });
+  };
+
+  const handleSetCurrent = () => {
+    if (!formValues) {
+      return;
+    }
+
+    setCurrentMessage("");
+
+    startSettingCurrent(async () => {
+      const result = await setCurrentProjectCardAction(formValues.id, selectedProjectId);
+
+      if (!result.success) {
+        setCurrentMessage(result.message);
+        return;
+      }
+
+      setCurrentMessage(result.message);
       router.refresh();
     });
   };
@@ -389,12 +436,94 @@ export function ProjectCardWorkspace({
 
             {versions.length > 0 ? (
               <div className="mt-5 space-y-3">
-                {versions.slice(0, 4).map((version) => (
-                  <div key={version.id} className="rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-600">
-                    <div className="font-medium text-slate-900">{version.title}</div>
+                {versions.map((version) => (
+                  <div
+                    key={version.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleViewVersion(version.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        handleViewVersion(version.id);
+                      }
+                    }}
+                    className={`cursor-pointer rounded-2xl px-4 py-3 text-sm leading-7 transition ${
+                      selectedVersion?.id === version.id
+                        ? "border border-sky-300 bg-sky-50"
+                        : "bg-slate-50 hover:border hover:border-sky-200 hover:bg-sky-50/60"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-medium text-slate-900">{version.title}</div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="text-xs text-sky-600">查看</span>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteVersion(version.id);
+                          }}
+                          className="text-xs text-red-500 transition hover:text-red-700"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
                     <div className="text-xs text-slate-500">{formatDateTime(version.createdAt)}</div>
                   </div>
                 ))}
+              </div>
+            ) : null}
+
+            {isLoadingVersion ? (
+              <div className="mt-4 text-xs text-slate-500">正在加载版本详情...</div>
+            ) : null}
+
+            {selectedVersion ? (
+              <div className="mt-4 rounded-2xl border border-sky-100 bg-white p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-slate-500">版本详情</div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVersion(null)}
+                    className="rounded-full px-2 py-0.5 text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  >
+                    收起
+                  </button>
+                </div>
+                <div className="mt-3 max-h-[360px] space-y-3 overflow-y-auto">
+                  {(() => {
+                    const content = selectedVersion.content as {
+                      title?: string;
+                      background?: string;
+                      backgroundFactStatus?: string;
+                      responsibility?: string;
+                      responsibilityFactStatus?: string;
+                      result?: string;
+                      resultFactStatus?: string;
+                      status?: string;
+                    } | null;
+
+                    if (!content || typeof content !== "object") {
+                      return <div className="text-xs leading-6 text-slate-500">无内容</div>;
+                    }
+
+                    const sections: Array<{ label: string; value: string }> = [
+                      { label: "项目卡片标题", value: content.title ?? "（空）" },
+                      { label: "项目背景", value: content.background ?? "（空）" },
+                      { label: "核心职责", value: content.responsibility ?? "（空）" },
+                      { label: "项目结果", value: content.result ?? "（空）" },
+                      { label: "卡片状态", value: content.status ?? "（空）" }
+                    ];
+
+                    return sections.map((section) => (
+                      <div key={section.label} className="rounded-xl bg-slate-50 p-3">
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{section.label}</div>
+                        <div className="mt-2 whitespace-pre-wrap text-xs leading-6 text-slate-700">{section.value}</div>
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             ) : null}
           </div>
@@ -411,15 +540,30 @@ export function ProjectCardWorkspace({
           ) : (
             <>
               <section className="page-card p-6">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                   <div>
                     <h2 className="font-semibold text-slate-900">项目卡片草稿</h2>
                     <p className="mt-1 text-sm text-slate-500">查看并确认结构化内容</p>
                   </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                    {cardStatusOptions.find((item) => item.value === formValues.status)?.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {formValues.isCurrentProjectCard ? (
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">当前最终版本</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSetCurrent}
+                        disabled={isSettingCurrent}
+                        className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isSettingCurrent ? "设置中..." : "设为当前最终版本"}
+                      </button>
+                    )}
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                      {cardStatusOptions.find((item) => item.value === formValues.status)?.label}
+                    </span>
+                  </div>
                 </div>
+                {currentMessage ? <div className="mt-3 text-xs leading-6 text-slate-500">{currentMessage}</div> : null}
 
                 <div className="mt-5 space-y-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -499,13 +643,8 @@ export function ProjectCardWorkspace({
                     </div>
                   </div>
 
-                  {saveError ? <ErrorDisplay error={saveError} compact /> : null}
-
                   <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                    <p className="text-sm text-slate-500">{saveMessage}</p>
-                    <button type="button" onClick={handleSaveCard} disabled={isSavingCard} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400">
-                      {isSavingCard ? "保存中..." : "保存卡片"}
-                    </button>
+                    <p className="text-sm text-slate-500">修改会自动暂存在本地；确认无误后，点击左侧「保存版本」生成历史快照。</p>
                   </div>
                 </div>
               </section>

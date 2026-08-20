@@ -6,15 +6,20 @@ import { requireClerkUserId } from "@/lib/auth-scope";
 import { generateProjectCardDraft } from "@/lib/ai-config";
 import { getWorkspaceProjectById } from "@/lib/neon-db";
 import { getLatestProjectMaterial, listQuestionAnswerTimeline } from "@/lib/stage6-data";
+import { getVersionById } from "@/lib/stage11-data";
 import {
   createProjectCardVersion,
   getLatestProjectCard,
   saveGeneratedProjectCard,
+  setCurrentProjectCard,
   updateProjectCard
 } from "@/lib/stage7-data";
 
 const factStatusSchema = z.enum(["CONFIRMED", "NEEDS_CONFIRMATION", "EXPRESSION_SUGGESTION"]);
 const cardStatusSchema = z.enum(["DRAFT", "PENDING_CONFIRMATION", "CONFIRMED"]);
+
+type FactStatus = z.infer<typeof factStatusSchema>;
+type CardStatus = z.infer<typeof cardStatusSchema>;
 
 const updateProjectCardSchema = z.object({
   projectId: z.string().trim().min(1, "缺少项目信息，请重新选择项目。").optional(),
@@ -195,10 +200,74 @@ export async function updateProjectCardAction(values: z.infer<typeof updateProje
   };
 }
 
-export async function saveProjectCardVersionAction(projectId: string | null, cardId?: string): Promise<ActionResult> {
+export async function saveProjectCardVersionAction(
+  projectId: string | null,
+  options: {
+    cardId?: string;
+    content?: {
+      title: string;
+      background: string;
+      backgroundFactStatus: FactStatus;
+      responsibility: string;
+      responsibilityFactStatus: FactStatus;
+      result: string;
+      resultFactStatus: FactStatus;
+      status: CardStatus;
+    };
+  } = {}
+): Promise<ActionResult> {
   const userId = requireClerkUserId();
+  const { cardId, content } = options;
 
-  // 优先按 cardId 保存（独立卡片库场景），否则回退项目最新卡片（兼容旧流程）
+  // 传入了前端当前编辑内容：先落草稿（数据库有卡片则同步更新），再基于该内容生成版本快照，
+  // 保证「保存版本」= 保存此刻你看到的卡片，不会抓到数据库里的旧内容。
+  if (content) {
+    const parsed = updateProjectCardSchema.safeParse({
+      projectId: projectId ?? undefined,
+      cardId: cardId ?? "",
+      ...content
+    });
+
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: parsed.error.issues[0]?.message ?? "保存版本失败，请检查卡片内容。"
+      };
+    }
+
+    if (cardId) {
+      await updateProjectCard(cardId, userId, parsed.data);
+    }
+
+    const version = await createProjectCardVersion(cardId ?? "", userId, {
+      id: cardId ?? "",
+      projectId: projectId ?? null,
+      clerkUserId: userId,
+      title: parsed.data.title,
+      background: parsed.data.background,
+      backgroundFactStatus: parsed.data.backgroundFactStatus,
+      responsibility: parsed.data.responsibility,
+      responsibilityFactStatus: parsed.data.responsibilityFactStatus,
+      result: parsed.data.result,
+      resultFactStatus: parsed.data.resultFactStatus,
+      status: parsed.data.status,
+      resumeMaterialId: null,
+      isCurrentProjectCard: false,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
+    revalidatePath("/project-card");
+    revalidatePath("/cards");
+
+    return {
+      success: true,
+      message: `项目卡片版本已保存：${version.title}`,
+      savedAt: version.createdAt.toISOString()
+    };
+  }
+
+  // 兼容旧调用：无 content 时按 cardId / 项目取数据库卡片生成快照
   const card = cardId
     ? await getProjectCardById(cardId, userId)
     : projectId
@@ -224,9 +293,51 @@ export async function saveProjectCardVersionAction(projectId: string | null, car
   };
 }
 
+/** 设置某张卡片为「当前最终版本」（同求职计划下唯一；独立卡片库按无计划维度唯一）。 */
+export async function setCurrentProjectCardAction(cardId: string, projectId: string | null): Promise<ActionResult> {
+  const userId = requireClerkUserId();
+  const card = await setCurrentProjectCard(cardId, userId, projectId);
+
+  if (!card) {
+    return {
+      success: false,
+      message: "未找到该卡片，或你无权操作。"
+    };
+  }
+
+  revalidatePath("/project-card");
+  revalidatePath("/cards");
+  revalidatePath("/resume-rewrite");
+
+  return {
+    success: true,
+    message: `已将「${card.title ?? "未命名卡片"}」设为当前最终版本，后续简历改写默认使用它。`,
+    savedAt: card.updatedAt.toISOString()
+  };
+}
+
 /** 按 id 查询用户的一张项目卡片。 */
 async function getProjectCardById(cardId: string, userId: string) {
   const { listProjectCards } = await import("@/lib/stage7-data");
   const cards = await listProjectCards(userId);
   return cards.find((card) => card.id === cardId) ?? null;
+}
+
+/** 读取项目卡片版本详情（供版本列表点击查看历史快照）。 */
+export async function getProjectCardVersionDetailAction(
+  versionId: string
+): Promise<{ success: true; title: string; createdAt: string; content: unknown } | { success: false; message: string }> {
+  const userId = requireClerkUserId();
+  const version = await getVersionById(versionId, userId);
+
+  if (!version) {
+    return { success: false, message: "未找到该版本记录，或你无权访问。" };
+  }
+
+  return {
+    success: true,
+    title: version.title,
+    createdAt: version.createdAt.toISOString(),
+    content: version.content
+  };
 }

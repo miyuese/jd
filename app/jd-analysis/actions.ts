@@ -16,7 +16,8 @@ import {
   saveGeneratedMatchAnalysis,
   saveJdRecord,
   updateJdCapabilitySummary,
-  updateMatchAnalysis
+  updateMatchAnalysis,
+  updateMatchAnalysisProjectCard
 } from "@/lib/stage8-data";
 
 const saveJdSchema = z.object({
@@ -297,14 +298,106 @@ export async function updateMatchAnalysisAction(values: z.infer<typeof updateMat
 
 export async function saveMatchAnalysisVersionAction(
   projectId: string,
-  jdId?: string,
-  cardId?: string
+  options: {
+    jdId?: string;
+    cardId?: string;
+    content?: {
+      matchAnalysisId: string;
+      matchedPoints: string[];
+      gapPoints: string[];
+      suggestionPoints: string[];
+      plainMatchedPoints: string;
+      plainGapPoints: string;
+      plainSuggestionPoints: string;
+      summary: string;
+      status: string;
+    };
+  } = {}
 ): Promise<ActionResult> {
   let stage = "初始化";
 
   try {
     stage = "读取登录用户";
     const userId = requireClerkUserId();
+    const { jdId, cardId, content } = options;
+
+    // 传入了前端当前编辑内容：先落草稿，再基于该内容生成版本快照，
+    // 保证「保存版本」= 保存此刻你看到的内容，与右下角「保存当前匹配分析」行为一致。
+    if (content) {
+      stage = "校验匹配分析内容";
+      const parsed = updateMatchAnalysisSchema.safeParse({
+        projectId,
+        matchAnalysisId: content.matchAnalysisId,
+        matchedPoints: content.matchedPoints,
+        gapPoints: content.gapPoints,
+        suggestionPoints: content.suggestionPoints,
+        plainMatchedPoints: content.plainMatchedPoints,
+        plainGapPoints: content.plainGapPoints,
+        plainSuggestionPoints: content.plainSuggestionPoints,
+        summary: content.summary,
+        status: content.status
+      });
+
+      if (!parsed.success) {
+        return {
+          success: false,
+          message: parsed.error.issues[0]?.message ?? "保存版本失败，请检查匹配分析内容。"
+        };
+      }
+
+      stage = "校验项目权限";
+      const project = await getWorkspaceProjectById(projectId, userId);
+
+      if (!project) {
+        return {
+          success: false,
+          message: "当前项目不存在，或你无权保存该匹配分析版本。"
+        };
+      }
+
+      stage = "保存匹配分析草稿";
+      const updated = await updateMatchAnalysis(parsed.data.matchAnalysisId, projectId, userId, {
+        matchedPoints: parsed.data.matchedPoints,
+        gapPoints: parsed.data.gapPoints,
+        suggestionPoints: parsed.data.suggestionPoints,
+        plainExplanations: {
+          matchedPoints: parsed.data.plainMatchedPoints,
+          gapPoints: parsed.data.plainGapPoints,
+          suggestionPoints: parsed.data.plainSuggestionPoints
+        },
+        summary: parsed.data.summary,
+        status: parsed.data.status
+      });
+
+      if (!updated) {
+        return {
+          success: false,
+          message: "当前匹配分析不存在，或你无权编辑该草稿。"
+        };
+      }
+
+      // 兼容旧数据：分析无卡片关联但页面已选中卡片时回填维度
+      let resolvedCardId = updated.projectCardId;
+      if (cardId && !updated.projectCardId) {
+        await updateMatchAnalysisProjectCard(updated.id, cardId, userId);
+        resolvedCardId = cardId;
+      }
+
+      stage = "写入匹配分析版本快照";
+      const version = await createMatchAnalysisVersion(projectId, userId, {
+        ...updated,
+        projectCardId: resolvedCardId
+      });
+
+      stage = "刷新 JD 分析页面缓存";
+      revalidatePath("/jd-analysis");
+
+      return {
+        success: true,
+        message: `匹配分析版本已保存：${version.title}`,
+        savedAt: version.createdAt.toISOString()
+      };
+    }
 
     stage = "读取当前匹配分析（优先按交叉点卡片×JD）";
     const analysis = jdId
@@ -318,8 +411,19 @@ export async function saveMatchAnalysisVersionAction(
       };
     }
 
+    // 兼容旧数据：V2 前的分析没有卡片关联（projectCardId 为 null），
+    // 若页面已选中卡片则回填维度，保证新保存的版本能正确归位到「卡片 × JD」交叉点。
+    let resolvedCardId = analysis.projectCardId;
+    if (cardId && !analysis.projectCardId) {
+      await updateMatchAnalysisProjectCard(analysis.id, cardId, userId);
+      resolvedCardId = cardId;
+    }
+
     stage = "保存匹配分析版本到数据库";
-    const version = await createMatchAnalysisVersion(projectId, userId, analysis);
+    const version = await createMatchAnalysisVersion(projectId, userId, {
+      ...analysis,
+      projectCardId: resolvedCardId
+    });
 
     stage = "刷新 JD 分析页面缓存";
     revalidatePath("/jd-analysis");

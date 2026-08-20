@@ -74,9 +74,14 @@ export default async function CardsPage() {
                       ? new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(card.updatedAt)
                       : ""}
                   </span>
-                  <span className="rounded-full border border-[var(--line)] px-2.5 py-0.5">
-                    {card.status === "CONFIRMED" ? "已确认" : card.status === "PENDING_CONFIRMATION" ? "待确认" : "草稿"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {card.isCurrentProjectCard ? (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 font-medium text-emerald-700">当前最终版本</span>
+                    ) : null}
+                    <span className="rounded-full border border-[var(--line)] px-2.5 py-0.5">
+                      {card.status === "CONFIRMED" ? "已确认" : card.status === "PENDING_CONFIRMATION" ? "待确认" : "草稿"}
+                    </span>
+                  </div>
                 </div>
               </Link>
             ))}

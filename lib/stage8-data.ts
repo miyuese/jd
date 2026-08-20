@@ -390,6 +390,7 @@ export async function updateMatchAnalysis(
 export async function createMatchAnalysisVersion(projectId: string | null, clerkUserId: string, analysis: ReturnType<typeof mapMatchAnalysis>) {
   const sql = getSql();
   const title = `匹配分析版本 · ${new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -428,7 +429,7 @@ export async function listMatchAnalysisVersions(
   const sql = getSql();
 
   if (cross?.projectCardId && cross?.jdRecordId) {
-    const rows = (await sql.query(
+    const crossRows = (await sql.query(
       `
         SELECT "id", "title", "createdAt"
         FROM "VersionRecord"
@@ -439,7 +440,24 @@ export async function listMatchAnalysisVersions(
       [clerkUserId, cross.projectCardId, cross.jdRecordId]
     )) as VersionRecordRow[];
 
-    return rows.map(mapVersion);
+    // 兼容旧数据：V2 前的匹配分析没有卡片维度（sourceProjectCardId 为 null），
+    // 交叉点查询永远匹配不上。合并展示同一 JD 下的无卡片旧版本，避免"保存了但看不到"。
+    const legacyRows = (await sql.query(
+      `
+        SELECT "id", "title", "createdAt"
+        FROM "VersionRecord"
+        WHERE "clerkUserId" = $1 AND "type" = 'MATCH_ANALYSIS'
+          AND "sourceProjectCardId" IS NULL AND "jdRecordId" = $2
+        ORDER BY "createdAt" DESC
+      `,
+      [clerkUserId, cross.jdRecordId]
+    )) as VersionRecordRow[];
+
+    const merged = [...crossRows, ...legacyRows].map(mapVersion).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    if (merged.length > 0) {
+      return merged;
+    }
+    // 兜底：按项目维度查询（保证任何情况下列表非空）
   }
 
   if (!projectId) {
@@ -457,4 +475,17 @@ export async function listMatchAnalysisVersions(
   )) as VersionRecordRow[];
 
   return rows.map(mapVersion);
+}
+
+/** 回填匹配分析的卡片关联（旧数据无卡片维度时，保存版本前补上，让新版本正确归位）。 */
+export async function updateMatchAnalysisProjectCard(matchAnalysisId: string, projectCardId: string, clerkUserId: string) {
+  const sql = getSql();
+  await sql.query(
+    `
+      UPDATE "MatchAnalysis"
+      SET "projectCardId" = $1, "updatedAt" = NOW()
+      WHERE "id" = $2 AND "clerkUserId" = $3
+    `,
+    [projectCardId, matchAnalysisId, clerkUserId]
+  );
 }
